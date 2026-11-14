@@ -13,6 +13,7 @@ import {
   ChevronsUpDown,
   ClipboardCheck,
   ClipboardCopy,
+  ClipboardList,
   CopyPlus,
   Database,
   Dices,
@@ -23,19 +24,26 @@ import {
   FolderOpen,
   FolderUp,
   FileText,
+  History,
   KeyRound,
+  Link2,
   Lock,
   MessageSquarePlus,
+  MessageSquareWarning,
   MoreVertical,
   Move,
   Pencil,
   PenLine,
   Plus,
+  Redo2,
   Search,
+  ShieldAlert,
   Trash2,
+  Undo2,
   Unlock,
   Upload,
   UserCheck,
+  UserPlus,
   Users,
   X,
 } from 'lucide-react';
@@ -44,17 +52,25 @@ import { FeuilleCouvertureDocument } from '../data/feuilleCouvertureTemplates';
 import {
   ClientSessionConfig,
   WorkflowNatureId,
+  WorkflowNodeStatus,
   WorkflowTreeNode,
 } from '../types/workflow';
 import {
+  AuditReadinessReport,
   collectAllNodesList,
   generateRandomAuditDocumentName,
   getWorkflowCheckState,
   hasLockedNodeInIds,
   isNodeLockedOrWithinLockedAncestor,
   NodeMoveDirection,
+  runAuditReadinessCheck,
+  WORKFLOW_STATUS_LABELS,
 } from '../utils/workflowTreeOps';
 import { IntegratedDataViewer } from './IntegratedDataViewer';
+import {
+  NodeInspectorState,
+  WorkflowNodeInspector,
+} from './WorkflowNodeInspector';
 
 interface TriCheckboxProps {
   state: 'checked' | 'unchecked' | 'indeterminate';
@@ -150,6 +166,22 @@ interface RightSlidingMenuProps {
   onClearClientKeys: () => void;
   highlightedNodeId: string | null;
   statusMessage: string | null;
+  canUndo: boolean;
+  undoLabel?: string;
+  canRedo: boolean;
+  redoLabel?: string;
+  onUndo: () => void;
+  onRedo: () => void;
+  onSetNodesStatus: (status: WorkflowNodeStatus, fallbackNodeId?: string) => void;
+  onAddReviewNote: (nodeId: string, text: string) => void;
+  onToggleReviewNote: (nodeId: string, noteId: string) => void;
+  onDeleteReviewNote: (nodeId: string, noteId: string) => void;
+  onSaveVersion: (nodeId: string, summary: string) => void;
+  onRestoreVersion: (nodeId: string, versionId: string) => void;
+  onAddCrossRef: (sourceId: string, targetRefId: string) => void;
+  onRemoveCrossRef: (sourceId: string, targetRefId: string) => void;
+  onAssignNodes: (targetIds: string[], assignee: string, dueDate: string) => void;
+  onJumpToNode: (targetId: string) => void;
 }
 
 function nodeMatchesSearch(node: WorkflowTreeNode, query: string): boolean {
@@ -216,6 +248,22 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   onClearClientKeys,
   highlightedNodeId,
   statusMessage,
+  canUndo,
+  undoLabel,
+  canRedo,
+  redoLabel,
+  onUndo,
+  onRedo,
+  onSetNodesStatus,
+  onAddReviewNote,
+  onToggleReviewNote,
+  onDeleteReviewNote,
+  onSaveVersion,
+  onRestoreVersion,
+  onAddCrossRef,
+  onRemoveCrossRef,
+  onAssignNodes,
+  onJumpToNode,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showApiPanel, setShowApiPanel] = useState(false);
@@ -246,6 +294,9 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
 
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [showNatureSubmenu, setShowNatureSubmenu] = useState(false);
+  const [showStatusSubmenu, setShowStatusSubmenu] = useState(false);
+  const [inspector, setInspector] = useState<NodeInspectorState | null>(null);
+  const [readinessReport, setReadinessReport] = useState<AuditReadinessReport | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const importDirInputRef = useRef<HTMLInputElement | null>(null);
@@ -274,6 +325,29 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
       return;
     }
     const onKeyDown = (e: KeyboardEvent) => {
+      const targetTag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      const isEditingText = targetTag === 'input' || targetTag === 'textarea';
+
+      if (!isEditingText && (e.ctrlKey || e.metaKey)) {
+        if (e.key.toLowerCase() === 'z' && !e.shiftKey) {
+          if (canUndo) {
+            e.preventDefault();
+            onUndo();
+          }
+          return;
+        }
+        if (
+          e.key.toLowerCase() === 'y' ||
+          (e.key.toLowerCase() === 'z' && e.shiftKey)
+        ) {
+          if (canRedo) {
+            e.preventDefault();
+            onRedo();
+          }
+          return;
+        }
+      }
+
       if (e.key === 'Escape') {
         if (contextMenu) {
           setContextMenu(null);
@@ -283,6 +357,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
           setRenamingId(null);
         } else if (addingTarget) {
           setAddingTarget(null);
+        } else if (inspector) {
+          setInspector(null);
         } else {
           onClose();
         }
@@ -303,7 +379,19 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('mousedown', onClickOutside);
     };
-  }, [isOpen, onClose, renamingId, addingTarget, contextMenu, pinPrompt]);
+  }, [
+    isOpen,
+    onClose,
+    renamingId,
+    addingTarget,
+    contextMenu,
+    pinPrompt,
+    inspector,
+    canUndo,
+    canRedo,
+    onUndo,
+    onRedo,
+  ]);
 
   const visibleRoots = useMemo(() => {
     return trees.filter((root) => {
@@ -340,10 +428,11 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
 
   const openContextMenuAt = (x: number, y: number, node: WorkflowTreeNode | null) => {
     const menuWidth = 288;
-    const menuHeight = node ? 540 : 140;
+    const menuHeight = node ? 580 : 190;
     const clampedX = Math.min(x, window.innerWidth - menuWidth - 12);
     const clampedY = Math.min(y, window.innerHeight - menuHeight - 12);
     setShowNatureSubmenu(false);
+    setShowStatusSubmenu(false);
     setContextMenu({
       x: Math.max(12, clampedX),
       y: Math.max(12, clampedY),
@@ -591,6 +680,72 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
               >
                 {node.nodeType === 'signature' ? `[${node.label}]` : node.label}
               </span>
+              {node.status && (
+                <span
+                  title={`Statut : ${WORKFLOW_STATUS_LABELS[node.status]}`}
+                  className={`h-2 w-2 shrink-0 rounded-full ${
+                    node.status === 'validated'
+                      ? 'bg-emerald-400'
+                      : node.status === 'in-review'
+                      ? 'bg-amber-400'
+                      : node.status === 'in-progress'
+                      ? 'bg-sky-400'
+                      : 'bg-slate-500'
+                  }`}
+                />
+              )}
+              {(node.assignee || node.dueDate) && (
+                <span
+                  title={`Assigné à ${node.assignee || 'non défini'}${
+                    node.dueDate ? ` · Échéance ${node.dueDate}` : ''
+                  }`}
+                  className={`hidden shrink-0 font-mono text-[10px] sm:inline ${
+                    node.dueDate &&
+                    node.dueDate < new Date().toISOString().slice(0, 10) &&
+                    node.status !== 'validated'
+                      ? 'text-red-400'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  {node.assignee ? `@${node.assignee}` : ''}
+                  {node.assignee && node.dueDate ? ' · ' : ''}
+                  {node.dueDate ? node.dueDate.slice(5) : ''}
+                </span>
+              )}
+              {(() => {
+                const openNotesCount = (node.reviewNotes || []).filter(
+                  (rn) => rn.status === 'open'
+                ).length;
+                if (openNotesCount === 0) return null;
+                return (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setInspector({ mode: 'notes', nodeId: node.id });
+                    }}
+                    title={`${openNotesCount} note(s) de revue ouverte(s)`}
+                    className="inline-flex shrink-0 items-center gap-0.5 text-amber-400 hover:text-amber-300"
+                  >
+                    <MessageSquareWarning className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span className="font-mono text-[10px] tabular-nums">{openNotesCount}</span>
+                  </span>
+                );
+              })()}
+              {node.crossRefs && node.crossRefs.length > 0 && (
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setInspector({ mode: 'crossrefs', nodeId: node.id });
+                  }}
+                  title={`${node.crossRefs.length} référence(s) croisée(s)`}
+                  className="inline-flex shrink-0 items-center gap-0.5 text-indigo-400 hover:text-indigo-300"
+                >
+                  <Link2 className="h-3 w-3" aria-hidden="true" />
+                  <span className="font-mono text-[10px] tabular-nums">
+                    {node.crossRefs.length}
+                  </span>
+                </span>
+              )}
               {node.managerReviewed && (
                 <span
                   title="Revue manager effectuée"
@@ -1039,6 +1194,15 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {!openedWordDoc.locked && (
+                      <button
+                        type="button"
+                        onClick={() => onSaveVersion(openedWordDoc.id, 'Sauvegarde depuis Word')}
+                        className="rounded bg-white/15 px-2.5 py-0.5 text-[11px] font-medium hover:bg-white/25 cursor-pointer"
+                      >
+                        Enregistrer version
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => onOpenDocumentInChat(openedWordDoc)}
@@ -1117,29 +1281,55 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             />
           )}
 
-          {/* Arborescence Workflow & Team Workflow */}
+          {/* Arborescence Workflow & Team Workflow + Inspecteur contextuel */}
           <div
-            role="tree"
-            aria-label="Arborescence Workflow et Team Workflow"
-            onScroll={() => contextMenu && setContextMenu(null)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              openContextMenuAt(e.clientX, e.clientY, null);
-            }}
-            className={`space-y-1 overflow-y-auto px-4 py-3 ${
+            className={`flex min-h-0 flex-col overflow-hidden ${
               openedWordDoc || integratedDataDoc
-                ? 'min-h-[180px] shrink-0 lg:w-[390px] lg:flex-none'
+                ? 'min-h-[180px] shrink-0 lg:w-[410px] lg:flex-none'
                 : 'flex-1'
             }`}
           >
-            {visibleRoots.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-slate-700 p-6 text-center text-xs text-slate-400">
-                Aucune clé API active. Cliquez sur « Clés API » puis sur « Initialisation client » pour
-                afficher les workflows de l&apos;entité.
-              </div>
-            ) : (
-              visibleRoots.map((root) => renderNode(root, 0))
+            {inspector && (
+              <WorkflowNodeInspector
+                inspector={inspector}
+                trees={trees}
+                wordBodies={wordBodies}
+                isNodeLocked={(nodeId) =>
+                  isNodeLockedOrWithinLockedAncestor(trees, nodeId)
+                }
+                readinessReport={readinessReport}
+                onClose={() => setInspector(null)}
+                onJumpToNode={onJumpToNode}
+                onAddReviewNote={onAddReviewNote}
+                onToggleReviewNote={onToggleReviewNote}
+                onDeleteReviewNote={onDeleteReviewNote}
+                onSaveVersion={onSaveVersion}
+                onRestoreVersion={onRestoreVersion}
+                onAddCrossRef={onAddCrossRef}
+                onRemoveCrossRef={onRemoveCrossRef}
+                onAssignNodes={onAssignNodes}
+              />
             )}
+
+            <div
+              role="tree"
+              aria-label="Arborescence Workflow et Team Workflow"
+              onScroll={() => contextMenu && setContextMenu(null)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                openContextMenuAt(e.clientX, e.clientY, null);
+              }}
+              className="flex-1 space-y-1 overflow-y-auto px-4 py-3"
+            >
+              {visibleRoots.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-700 p-6 text-center text-xs text-slate-400">
+                  Aucune clé API active. Cliquez sur « Clés API » puis sur « Initialisation client » pour
+                  afficher les workflows de l&apos;entité.
+                </div>
+              ) : (
+                visibleRoots.map((root) => renderNode(root, 0))
+              )}
+            </div>
           </div>
         </div>
       </aside>
@@ -1166,6 +1356,39 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
           </div>
 
           <div className="py-1">
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!canUndo}
+              onClick={() => {
+                onUndo();
+                setContextMenu(null);
+              }}
+              className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+            >
+              <Undo2 className="h-3.5 w-3.5 text-slate-300" aria-hidden="true" />
+              <span className="truncate">
+                {canUndo && undoLabel ? `Annuler : ${undoLabel}` : 'Annuler (Ctrl+Z)'}
+              </span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!canRedo}
+              onClick={() => {
+                onRedo();
+                setContextMenu(null);
+              }}
+              className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+            >
+              <Redo2 className="h-3.5 w-3.5 text-slate-300" aria-hidden="true" />
+              <span className="truncate">
+                {canRedo && redoLabel ? `Rétablir : ${redoLabel}` : 'Rétablir (Ctrl+Y)'}
+              </span>
+            </button>
+
+            <div className="my-1 border-t border-slate-800" />
+
             {contextMenu.node && contextMenu.node.children && contextMenu.node.children.length > 0 && (
               <>
                 <button
@@ -1581,6 +1804,160 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                       </span>
                     </button>
 
+                    {/* Point 1 : Statut d'avancement */}
+                    <div>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={actionBlockedByLock}
+                        onClick={() => setShowStatusSubmenu((v) => !v)}
+                        className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                      >
+                        <span className="flex items-center gap-2.5">
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${
+                              ctxNode.status === 'validated'
+                                ? 'bg-emerald-400'
+                                : ctxNode.status === 'in-review'
+                                ? 'bg-amber-400'
+                                : ctxNode.status === 'in-progress'
+                                ? 'bg-sky-400'
+                                : 'bg-slate-400'
+                            }`}
+                          />
+                          <span>
+                            Statut ({WORKFLOW_STATUS_LABELS[ctxNode.status || 'todo']})
+                          </span>
+                        </span>
+                        <ChevronRight
+                          className={`h-3.5 w-3.5 text-slate-400 transition-transform ${
+                            showStatusSubmenu ? 'rotate-90' : ''
+                          }`}
+                          aria-hidden="true"
+                        />
+                      </button>
+
+                      {showStatusSubmenu && !actionBlockedByLock && (
+                        <div className="mx-2 my-1 space-y-0.5 rounded-lg border border-slate-800 bg-slate-950 p-1">
+                          {(
+                            [
+                              ['todo', 'bg-slate-400'],
+                              ['in-progress', 'bg-sky-400'],
+                              ['in-review', 'bg-amber-400'],
+                              ['validated', 'bg-emerald-400'],
+                            ] as [WorkflowNodeStatus, string][]
+                          ).map(([st, dotClass]) => (
+                            <button
+                              key={st}
+                              type="button"
+                              onClick={() => {
+                                onSetNodesStatus(st, ctxNode.id);
+                                setContextMenu(null);
+                              }}
+                              className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 cursor-pointer"
+                            >
+                              <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+                              <span>{WORKFLOW_STATUS_LABELS[st]}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Point 2 : Notes de revue */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setInspector({ mode: 'notes', nodeId: ctxNode.id });
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <MessageSquareWarning className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
+                      <span>
+                        Notes de revue
+                        {ctxNode.reviewNotes && ctxNode.reviewNotes.length > 0
+                          ? ` (${ctxNode.reviewNotes.length})`
+                          : ''}
+                      </span>
+                    </button>
+
+                    {/* Point 4 : Historique des versions */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setInspector({ mode: 'versions', nodeId: ctxNode.id });
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <History className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" />
+                      <span>
+                        Historique des versions
+                        {ctxNode.versions && ctxNode.versions.length > 0
+                          ? ` (${ctxNode.versions.length})`
+                          : ''}
+                      </span>
+                    </button>
+
+                    {/* Point 5 : Cross-référencer */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setInspector({ mode: 'crossrefs', nodeId: ctxNode.id });
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <Link2 className="h-3.5 w-3.5 text-indigo-400" aria-hidden="true" />
+                      <span>
+                        Lier / Cross-référencer
+                        {ctxNode.crossRefs && ctxNode.crossRefs.length > 0
+                          ? ` (${ctxNode.crossRefs.length})`
+                          : ''}
+                      </span>
+                    </button>
+
+                    {/* Point 7 : Assigner & Échéance */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={actionBlockedByLock}
+                      onClick={() => {
+                        const targets =
+                          checkedNonRootNodes.length > 0
+                            ? checkedNonRootNodes.map((n) => n.id)
+                            : [ctxNode.id];
+                        setInspector({
+                          mode: 'assign',
+                          nodeId: ctxNode.id,
+                          targetIds: targets,
+                        });
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                    >
+                      <UserPlus className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                      <span>Assigner / Échéance</span>
+                    </button>
+
+                    {/* Point 8 : Journal de traçabilité */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setInspector({ mode: 'audit', nodeId: ctxNode.id });
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <ClipboardList className="h-3.5 w-3.5 text-slate-300" aria-hidden="true" />
+                      <span>Journal de traçabilité</span>
+                    </button>
+
                     {!contextMenu.node.locked ? (
                       <button
                         type="button"
@@ -1627,6 +2004,21 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                     )}
                   </>
                 )}
+
+                {/* Point 9 : Contrôle de complétude (disponible aussi sur la racine) */}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setReadinessReport(runAuditReadinessCheck(ctxNode, wordBodies));
+                    setInspector({ mode: 'readiness', nodeId: ctxNode.id });
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                >
+                  <ShieldAlert className="h-3.5 w-3.5 text-blue-400" aria-hidden="true" />
+                  <span>Contrôle de complétude</span>
+                </button>
               </div>
 
               <div className="border-t border-slate-800 py-1">

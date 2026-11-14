@@ -1,8 +1,12 @@
 import {
+  AuditTrailEntry,
   ClientSessionConfig,
+  NodeVersionEntry,
   PostgresDocumentRow,
+  ReviewNoteItem,
   WorkflowCategoryMeta,
   WorkflowNatureId,
+  WorkflowNodeStatus,
   WorkflowTreeNode,
 } from '../types/workflow';
 
@@ -1115,3 +1119,527 @@ export function buildPostgresRowsFromTrees(
   trees.forEach((root) => walk(root, []));
   return rows;
 }
+
+export const WORKFLOW_STATUS_LABELS: Record<WorkflowNodeStatus, string> = {
+  todo: 'À faire',
+  'in-progress': 'En cours',
+  'in-review': 'En revue',
+  validated: 'Validé',
+};
+
+function makeAuditEntry(actor: string, action: string, detail?: string): AuditTrailEntry {
+  return {
+    id: nextUid('aud'),
+    timestamp: new Date().toISOString(),
+    actor: (actor || 'OHA').toUpperCase().slice(0, 12),
+    action,
+    ...(detail ? { detail } : {}),
+  };
+}
+
+export function appendAuditTrailToNodes(
+  nodes: WorkflowTreeNode[],
+  targetIds: Set<string>,
+  actor: string,
+  action: string,
+  detail?: string
+): WorkflowTreeNode[] {
+  if (targetIds.size === 0) return nodes;
+  return nodes.map((node) => {
+    const isTarget = targetIds.has(node.id);
+    const nextChildren = node.children
+      ? appendAuditTrailToNodes(node.children, targetIds, actor, action, detail)
+      : undefined;
+    if (!isTarget && !nextChildren) return node;
+    return {
+      ...node,
+      ...(isTarget
+        ? {
+            auditTrail: [
+              makeAuditEntry(actor, action, detail),
+              ...(node.auditTrail || []),
+            ].slice(0, 80),
+          }
+        : {}),
+      ...(nextChildren ? { children: nextChildren } : {}),
+    };
+  });
+}
+
+export function setNodesStatusInTree(
+  nodes: WorkflowTreeNode[],
+  targetIds: Set<string>,
+  status: WorkflowNodeStatus,
+  actor: string
+): WorkflowTreeNode[] {
+  return nodes.map((node) => {
+    const isTarget = node.nodeType !== 'root' && targetIds.has(node.id);
+    const nextChildren = node.children
+      ? setNodesStatusInTree(node.children, targetIds, status, actor)
+      : undefined;
+    if (!isTarget && !nextChildren) return node;
+    return {
+      ...node,
+      ...(isTarget
+        ? {
+            status,
+            auditTrail: [
+              makeAuditEntry(actor, 'Statut mis à jour', WORKFLOW_STATUS_LABELS[status]),
+              ...(node.auditTrail || []),
+            ].slice(0, 80),
+          }
+        : {}),
+      ...(nextChildren ? { children: nextChildren } : {}),
+    };
+  });
+}
+
+export function addReviewNoteToNode(
+  nodes: WorkflowTreeNode[],
+  targetId: string,
+  author: string,
+  text: string
+): WorkflowTreeNode[] {
+  const cleanText = text.trim();
+  if (!cleanText) return nodes;
+  const note: ReviewNoteItem = {
+    id: nextUid('note'),
+    author: (author || 'OHA').toUpperCase().slice(0, 12),
+    text: cleanText,
+    createdAt: new Date().toISOString(),
+    status: 'open',
+  };
+  return nodes.map((node) => {
+    if (node.id === targetId) {
+      return {
+        ...node,
+        reviewNotes: [note, ...(node.reviewNotes || [])],
+        auditTrail: [
+          makeAuditEntry(author, 'Note de revue ajoutée', cleanText.slice(0, 80)),
+          ...(node.auditTrail || []),
+        ].slice(0, 80),
+      };
+    }
+    if (node.children?.length) {
+      return { ...node, children: addReviewNoteToNode(node.children, targetId, author, text) };
+    }
+    return node;
+  });
+}
+
+export function toggleReviewNoteStatusInTree(
+  nodes: WorkflowTreeNode[],
+  targetId: string,
+  noteId: string,
+  actor: string
+): WorkflowTreeNode[] {
+  return nodes.map((node) => {
+    if (node.id === targetId) {
+      const nextNotes = (node.reviewNotes || []).map((n) => {
+        if (n.id !== noteId) return n;
+        const nextStatus: 'open' | 'resolved' = n.status === 'open' ? 'resolved' : 'open';
+        return {
+          ...n,
+          status: nextStatus,
+          resolvedAt: nextStatus === 'resolved' ? new Date().toISOString() : undefined,
+        };
+      });
+      const changed = nextNotes.find((n) => n.id === noteId);
+      return {
+        ...node,
+        reviewNotes: nextNotes,
+        auditTrail: changed
+          ? [
+              makeAuditEntry(
+                actor,
+                changed.status === 'resolved' ? 'Note de revue levée' : 'Note de revue rouverte',
+                changed.text.slice(0, 80)
+              ),
+              ...(node.auditTrail || []),
+            ].slice(0, 80)
+          : node.auditTrail,
+      };
+    }
+    if (node.children?.length) {
+      return {
+        ...node,
+        children: toggleReviewNoteStatusInTree(node.children, targetId, noteId, actor),
+      };
+    }
+    return node;
+  });
+}
+
+export function deleteReviewNoteInTree(
+  nodes: WorkflowTreeNode[],
+  targetId: string,
+  noteId: string,
+  actor: string
+): WorkflowTreeNode[] {
+  return nodes.map((node) => {
+    if (node.id === targetId) {
+      const removed = (node.reviewNotes || []).find((n) => n.id === noteId);
+      return {
+        ...node,
+        reviewNotes: (node.reviewNotes || []).filter((n) => n.id !== noteId),
+        auditTrail: removed
+          ? [
+              makeAuditEntry(actor, 'Note de revue supprimée', removed.text.slice(0, 80)),
+              ...(node.auditTrail || []),
+            ].slice(0, 80)
+          : node.auditTrail,
+      };
+    }
+    if (node.children?.length) {
+      return {
+        ...node,
+        children: deleteReviewNoteInTree(node.children, targetId, noteId, actor),
+      };
+    }
+    return node;
+  });
+}
+
+export function saveNodeVersionSnapshot(
+  nodes: WorkflowTreeNode[],
+  targetId: string,
+  author: string,
+  summary: string,
+  wordBodySnapshot: string
+): { trees: WorkflowTreeNode[]; versionLabel?: string } {
+  let createdLabel: string | undefined;
+  const walk = (list: WorkflowTreeNode[]): WorkflowTreeNode[] =>
+    list.map((node) => {
+      if (node.id === targetId) {
+        const existing = node.versions || [];
+        createdLabel = `v${existing.length + 1}`;
+        const entry: NodeVersionEntry = {
+          id: nextUid('ver'),
+          versionLabel: createdLabel,
+          author: (author || 'OHA').toUpperCase().slice(0, 12),
+          timestamp: new Date().toISOString(),
+          summary: summary.trim() || 'Sauvegarde manuelle',
+          labelSnapshot: node.label,
+          wordBodySnapshot,
+        };
+        return {
+          ...node,
+          versions: [entry, ...existing].slice(0, 30),
+          auditTrail: [
+            makeAuditEntry(actorSafe(author), `Version ${createdLabel} enregistrée`, entry.summary),
+            ...(node.auditTrail || []),
+          ].slice(0, 80),
+        };
+      }
+      if (node.children?.length) {
+        return { ...node, children: walk(node.children) };
+      }
+      return node;
+    });
+
+  return { trees: walk(nodes), versionLabel: createdLabel };
+}
+
+function actorSafe(actor: string): string {
+  return (actor || 'OHA').toUpperCase().slice(0, 12);
+}
+
+export function restoreNodeVersionSnapshot(
+  nodes: WorkflowTreeNode[],
+  targetId: string,
+  versionId: string,
+  actor: string
+): {
+  trees: WorkflowTreeNode[];
+  restoredBody?: string;
+  restoredLabel?: string;
+  versionLabel?: string;
+} {
+  let restoredBody: string | undefined;
+  let restoredLabel: string | undefined;
+  let versionLabel: string | undefined;
+
+  const walk = (list: WorkflowTreeNode[]): WorkflowTreeNode[] =>
+    list.map((node) => {
+      if (node.id === targetId) {
+        const targetVer = (node.versions || []).find((v) => v.id === versionId);
+        if (!targetVer) return node;
+        restoredBody = targetVer.wordBodySnapshot;
+        restoredLabel = targetVer.labelSnapshot;
+        versionLabel = targetVer.versionLabel;
+        return {
+          ...node,
+          label: targetVer.labelSnapshot,
+          auditTrail: [
+            makeAuditEntry(
+              actor,
+              `Version ${targetVer.versionLabel} restaurée`,
+              targetVer.summary
+            ),
+            ...(node.auditTrail || []),
+          ].slice(0, 80),
+        };
+      }
+      if (node.children?.length) {
+        return { ...node, children: walk(node.children) };
+      }
+      return node;
+    });
+
+  return { trees: walk(nodes), restoredBody, restoredLabel, versionLabel };
+}
+
+export function addCrossReferenceToNode(
+  nodes: WorkflowTreeNode[],
+  sourceId: string,
+  targetRefId: string,
+  actor: string,
+  targetLabel: string
+): WorkflowTreeNode[] {
+  if (!sourceId || !targetRefId || sourceId === targetRefId) return nodes;
+  return nodes.map((node) => {
+    if (node.id === sourceId) {
+      const current = node.crossRefs || [];
+      if (current.includes(targetRefId)) return node;
+      return {
+        ...node,
+        crossRefs: [...current, targetRefId],
+        auditTrail: [
+          makeAuditEntry(actor, 'Référence croisée ajoutée', targetLabel),
+          ...(node.auditTrail || []),
+        ].slice(0, 80),
+      };
+    }
+    if (node.children?.length) {
+      return {
+        ...node,
+        children: addCrossReferenceToNode(node.children, sourceId, targetRefId, actor, targetLabel),
+      };
+    }
+    return node;
+  });
+}
+
+export function removeCrossReferenceFromNode(
+  nodes: WorkflowTreeNode[],
+  sourceId: string,
+  targetRefId: string,
+  actor: string,
+  targetLabel?: string
+): WorkflowTreeNode[] {
+  return nodes.map((node) => {
+    if (node.id === sourceId) {
+      return {
+        ...node,
+        crossRefs: (node.crossRefs || []).filter((id) => id !== targetRefId),
+        auditTrail: [
+          makeAuditEntry(actor, 'Référence croisée retirée', targetLabel || targetRefId),
+          ...(node.auditTrail || []),
+        ].slice(0, 80),
+      };
+    }
+    if (node.children?.length) {
+      return {
+        ...node,
+        children: removeCrossReferenceFromNode(
+          node.children,
+          sourceId,
+          targetRefId,
+          actor,
+          targetLabel
+        ),
+      };
+    }
+    return node;
+  });
+}
+
+export function assignNodesInTree(
+  nodes: WorkflowTreeNode[],
+  targetIds: Set<string>,
+  assignee: string,
+  dueDate: string,
+  actor: string
+): WorkflowTreeNode[] {
+  const cleanAssignee = assignee.trim();
+  const cleanDueDate = dueDate.trim();
+  return nodes.map((node) => {
+    const isTarget = node.nodeType !== 'root' && targetIds.has(node.id);
+    const nextChildren = node.children
+      ? assignNodesInTree(node.children, targetIds, assignee, dueDate, actor)
+      : undefined;
+    if (!isTarget && !nextChildren) return node;
+    const detailParts = [
+      cleanAssignee ? `Responsable: ${cleanAssignee}` : 'Responsable effacé',
+      cleanDueDate ? `Échéance: ${cleanDueDate}` : '',
+    ].filter(Boolean);
+    return {
+      ...node,
+      ...(isTarget
+        ? {
+            assignee: cleanAssignee || undefined,
+            dueDate: cleanDueDate || undefined,
+            auditTrail: [
+              makeAuditEntry(actor, 'Assignation / Échéance', detailParts.join(' · ')),
+              ...(node.auditTrail || []),
+            ].slice(0, 80),
+          }
+        : {}),
+      ...(nextChildren ? { children: nextChildren } : {}),
+    };
+  });
+}
+
+export interface SubtreeCompletionStats {
+  total: number;
+  validated: number;
+  inReview: number;
+  inProgress: number;
+  todo: number;
+  percent: number;
+}
+
+export function computeSubtreeCompletionStats(node: WorkflowTreeNode): SubtreeCompletionStats {
+  const stats: SubtreeCompletionStats = {
+    total: 0,
+    validated: 0,
+    inReview: 0,
+    inProgress: 0,
+    todo: 0,
+    percent: 0,
+  };
+
+  const walk = (n: WorkflowTreeNode) => {
+    if (n.nodeType === 'document') {
+      stats.total += 1;
+      const s = n.status || 'todo';
+      if (s === 'validated') stats.validated += 1;
+      else if (s === 'in-review') stats.inReview += 1;
+      else if (s === 'in-progress') stats.inProgress += 1;
+      else stats.todo += 1;
+    }
+    n.children?.forEach(walk);
+  };
+  walk(node);
+
+  stats.percent = stats.total > 0 ? Math.round((stats.validated / stats.total) * 100) : 0;
+  return stats;
+}
+
+export interface AuditReadinessFinding {
+  id: string;
+  nodeId: string;
+  nodeLabel: string;
+  severity: 'critical' | 'warning';
+  category:
+    | 'empty-doc'
+    | 'unsigned'
+    | 'no-manager-review'
+    | 'open-note'
+    | 'overdue'
+    | 'not-validated';
+  message: string;
+}
+
+export interface AuditReadinessReport {
+  scopeId: string;
+  scopeLabel: string;
+  checkedAt: string;
+  stats: SubtreeCompletionStats;
+  findings: AuditReadinessFinding[];
+  isReady: boolean;
+}
+
+export function runAuditReadinessCheck(
+  scopeNode: WorkflowTreeNode,
+  wordBodies: Record<string, string>,
+  todayIso = new Date().toISOString().slice(0, 10)
+): AuditReadinessReport {
+  const findings: AuditReadinessFinding[] = [];
+  const stats = computeSubtreeCompletionStats(scopeNode);
+
+  const walk = (n: WorkflowTreeNode) => {
+    if (n.nodeType !== 'root') {
+      const openNotes = (n.reviewNotes || []).filter((rn) => rn.status === 'open');
+      if (openNotes.length > 0) {
+        findings.push({
+          id: `rd-note-${n.id}`,
+          nodeId: n.id,
+          nodeLabel: n.label,
+          severity: 'critical',
+          category: 'open-note',
+          message: `${openNotes.length} note(s) de revue ouverte(s) non soldée(s)`,
+        });
+      }
+
+      if (n.dueDate && n.dueDate < todayIso && n.status !== 'validated') {
+        findings.push({
+          id: `rd-due-${n.id}`,
+          nodeId: n.id,
+          nodeLabel: n.label,
+          severity: 'critical',
+          category: 'overdue',
+          message: `Échéance dépassée (${n.dueDate}) sans validation`,
+        });
+      }
+    }
+
+    if (n.nodeType === 'document') {
+      const body = wordBodies[n.id];
+      if (!body || body.trim().length === 0) {
+        findings.push({
+          id: `rd-empty-${n.id}`,
+          nodeId: n.id,
+          nodeLabel: n.label,
+          severity: 'warning',
+          category: 'empty-doc',
+          message: 'Contenu Word encore vierge',
+        });
+      }
+      if (!n.signature && !n.owner) {
+        findings.push({
+          id: `rd-sig-${n.id}`,
+          nodeId: n.id,
+          nodeLabel: n.label,
+          severity: 'warning',
+          category: 'unsigned',
+          message: 'Document sans signature préparateur',
+        });
+      }
+      if (!n.managerReviewed) {
+        findings.push({
+          id: `rd-mgr-${n.id}`,
+          nodeId: n.id,
+          nodeLabel: n.label,
+          severity: 'warning',
+          category: 'no-manager-review',
+          message: 'Revue manager manquante',
+        });
+      }
+      if (n.status !== 'validated') {
+        findings.push({
+          id: `rd-stat-${n.id}`,
+          nodeId: n.id,
+          nodeLabel: n.label,
+          severity: 'warning',
+          category: 'not-validated',
+          message: `Statut actuel : ${WORKFLOW_STATUS_LABELS[n.status || 'todo']}`,
+        });
+      }
+    }
+
+    n.children?.forEach(walk);
+  };
+
+  walk(scopeNode);
+
+  return {
+    scopeId: scopeNode.id,
+    scopeLabel: scopeNode.label,
+    checkedAt: new Date().toISOString(),
+    stats,
+    findings,
+    isReady: findings.length === 0 && stats.total > 0,
+  };
+}
+

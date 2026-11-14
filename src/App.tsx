@@ -32,6 +32,7 @@ import {
 import {
   ClientSessionConfig,
   WorkflowNatureId,
+  WorkflowNodeStatus,
   WorkflowTreeNode,
 } from './types/workflow';
 import {
@@ -45,13 +46,18 @@ import {
 } from './utils/dossierClassifier';
 import {
   addChildNodeToTarget,
+  addCrossReferenceToNode,
+  addReviewNoteToNode,
   addWorkflowToExercice,
+  appendAuditTrailToNodes,
   applySignatureToNodes,
+  assignNodesInTree,
   collectAllExpandableWorkflowIds,
   collectAllWorkflowNodeIds,
   collectSubtreeExpandableIds,
   createBlankWorkflowNode,
   deleteNodesInTree,
+  deleteReviewNoteInTree,
   duplicateNodesInTree,
   filterTopLevelSelectedIds,
   findNodeById,
@@ -66,20 +72,32 @@ import {
   moveNodesToTarget,
   NodeMoveDirection,
   pasteNodesToTarget,
+  removeCrossReferenceFromNode,
   renameNodeInTree,
   resolveContainerTargetId,
   resolveRootIdForTarget,
+  restoreNodeVersionSnapshot,
+  saveNodeVersionSnapshot,
+  setNodesStatusInTree,
   sortExercicesChronologically,
   toggleManagerReviewInTree,
+  toggleReviewNoteStatusInTree,
   toggleWorkflowNodeCheck,
   transferNodesToTarget,
   unlockNodeInTree,
+  WORKFLOW_STATUS_LABELS,
 } from './utils/workflowTreeOps';
 import {
   buildArchiveZipBlob,
   parseImportedDirectory,
   parseImportedFiles,
 } from './utils/workflowArchive';
+
+interface HistorySnapshot {
+  trees: WorkflowTreeNode[];
+  wordBodies: Record<string, string>;
+  label: string;
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveWorkspaceTab>('workspace');
@@ -128,6 +146,8 @@ export default function App() {
     node: WorkflowTreeNode;
     data: FeuilleCouvertureDocument;
   } | null>(null);
+  const [undoStack, setUndoStack] = useState<HistorySnapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<HistorySnapshot[]>([]);
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
@@ -138,6 +158,45 @@ export default function App() {
     if (statusTimeoutRef.current) window.clearTimeout(statusTimeoutRef.current);
     statusTimeoutRef.current = window.setTimeout(() => setWfStatusMessage(null), 3500);
   }, []);
+
+  const pushUndoSnapshot = useCallback(
+    (label: string) => {
+      setUndoStack((prev) => [
+        ...prev.slice(-39),
+        { trees: workflowTrees, wordBodies, label },
+      ]);
+      setRedoStack([]);
+    },
+    [workflowTrees, wordBodies]
+  );
+
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    const last = undoStack[undoStack.length - 1];
+    setUndoStack((prev) => prev.slice(0, -1));
+    setRedoStack((prev) => [
+      ...prev.slice(-39),
+      { trees: workflowTrees, wordBodies, label: last.label },
+    ]);
+    setWorkflowTrees(last.trees);
+    setWordBodies(last.wordBodies);
+    setOpenedWordDoc((prev) => (prev ? findNodeById(last.trees, prev.id) : null));
+    flashStatus(`Annulé : ${last.label}`);
+  }, [undoStack, workflowTrees, wordBodies, flashStatus]);
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    const next = redoStack[redoStack.length - 1];
+    setRedoStack((prev) => prev.slice(0, -1));
+    setUndoStack((prev) => [
+      ...prev.slice(-39),
+      { trees: workflowTrees, wordBodies, label: next.label },
+    ]);
+    setWorkflowTrees(next.trees);
+    setWordBodies(next.wordBodies);
+    setOpenedWordDoc((prev) => (prev ? findNodeById(next.trees, prev.id) : null));
+    flashStatus(`Rétabli : ${next.label}`);
+  }, [redoStack, workflowTrees, wordBodies, flashStatus]);
 
   const runDomScan = useCallback(() => {
     const map = scanDomForAuditTables(chatContainerRef.current);
@@ -317,6 +376,7 @@ export default function App() {
       }
 
       const targetNode = findNodeById(workflowTrees, targetId);
+      pushUndoSnapshot('Transfert');
       setWorkflowTrees((prev) =>
         transferNodesToTarget(prev, sources, targetId, session.userSignature)
       );
@@ -333,7 +393,7 @@ export default function App() {
         `${sources.length} élément(s) transféré(s) vers « ${targetNode?.label || 'destination'} » (source conservée, signature ${session.userSignature}).`
       );
     },
-    [activatedSourceIds, wfCheckedIds, workflowTrees, session.userSignature, flashStatus]
+    [activatedSourceIds, wfCheckedIds, workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
   const handleOpenWordDoc = useCallback(
@@ -499,6 +559,7 @@ export default function App() {
           return;
         }
         const targetNode = findNodeById(workflowTrees, targetId);
+        pushUndoSnapshot('Import fichier(s)');
         setWorkflowTrees((prev) =>
           sortExercicesChronologically(insertNodesAtTarget(prev, targetId, importedNodes))
         );
@@ -520,7 +581,7 @@ export default function App() {
         flashStatus("Impossible d'importer cette archive ou ce fichier.");
       }
     },
-    [workflowTrees, session.userSignature, session.email, flashStatus]
+    [workflowTrees, session.userSignature, session.email, pushUndoSnapshot, flashStatus]
   );
 
   const handleImportDirectoryToNode = useCallback(
@@ -541,6 +602,7 @@ export default function App() {
           return;
         }
         const targetNode = findNodeById(workflowTrees, targetId);
+        pushUndoSnapshot('Import dossier');
         setWorkflowTrees((prev) =>
           sortExercicesChronologically(insertNodesAtTarget(prev, targetId, importedNodes))
         );
@@ -563,7 +625,7 @@ export default function App() {
         flashStatus("Impossible d'importer ce dossier.");
       }
     },
-    [workflowTrees, session.userSignature, session.email, flashStatus]
+    [workflowTrees, session.userSignature, session.email, pushUndoSnapshot, flashStatus]
   );
 
   const handleDuplicateNodes = useCallback(
@@ -582,10 +644,11 @@ export default function App() {
         flashStatus('Duplication bloquée : un élément verrouillé ne peut pas être dupliqué.');
         return;
       }
+      pushUndoSnapshot('Duplication');
       setWorkflowTrees((prev) => duplicateNodesInTree(prev, targetIds));
       flashStatus('Élément(s) dupliqué(s) dans l’arborescence.');
     },
-    [workflowTrees, wfCheckedIds, flashStatus]
+    [workflowTrees, wfCheckedIds, pushUndoSnapshot, flashStatus]
   );
 
   const handleDeleteNodes = useCallback(
@@ -606,6 +669,7 @@ export default function App() {
         flashStatus('Suppression bloquée : un élément verrouillé nécessite son code PIN.');
         return;
       }
+      pushUndoSnapshot('Suppression');
       setWorkflowTrees((prev) => deleteNodesInTree(prev, targetIds));
       setWfCheckedIds((prev) => {
         const next = new Set(prev);
@@ -619,7 +683,7 @@ export default function App() {
       setIntegratedDataDoc((prev) => (prev && targetIds.has(prev.node.id) ? null : prev));
       flashStatus('Élément(s) supprimé(s) de la vue.');
     },
-    [workflowTrees, wfCheckedIds, flashStatus]
+    [workflowTrees, wfCheckedIds, pushUndoSnapshot, flashStatus]
   );
 
   const handleRenameNode = useCallback(
@@ -629,11 +693,22 @@ export default function App() {
         flashStatus('Renommage bloqué : déverrouillez d’abord cet élément avec son code PIN.');
         return;
       }
-      setWorkflowTrees((prev) => sortExercicesChronologically(renameNodeInTree(prev, nodeId, newLabel)));
+      pushUndoSnapshot(`Renommage « ${newLabel} »`);
+      setWorkflowTrees((prev) =>
+        sortExercicesChronologically(
+          appendAuditTrailToNodes(
+            renameNodeInTree(prev, nodeId, newLabel),
+            new Set([nodeId]),
+            session.userSignature,
+            'Renommé',
+            newLabel
+          )
+        )
+      );
       setOpenedWordDoc((prev) => (prev && prev.id === nodeId ? { ...prev, label: newLabel } : prev));
       flashStatus(`Renommé en « ${newLabel} ».`);
     },
-    [workflowTrees, flashStatus]
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
   const handleSignNodes = useCallback(
@@ -658,7 +733,16 @@ export default function App() {
         flashStatus('Aucun élément éligible à intégrer sous votre signature.');
         return;
       }
-      setWorkflowTrees(result.trees);
+      pushUndoSnapshot(`Signature [${session.userSignature}]`);
+      setWorkflowTrees(
+        appendAuditTrailToNodes(
+          result.trees,
+          new Set(targets),
+          session.userSignature,
+          'Signature intégrée',
+          `[${session.userSignature}]`
+        )
+      );
       setWfExpandedIds((prev) => {
         const next = new Set(prev);
         result.signatureFolderIds.forEach((id) => {
@@ -673,15 +757,21 @@ export default function App() {
         `${result.signedCount} élément(s) intégré(s) sous la signature [${session.userSignature}].`
       );
     },
-    [workflowTrees, wfCheckedIds, session.userSignature, flashStatus]
+    [workflowTrees, wfCheckedIds, session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
   const handleLockNodes = useCallback(
     (targetIds: string[], pin: string) => {
       const idSet = new Set(targetIds);
       if (idSet.size === 0) return;
+      pushUndoSnapshot('Verrouillage PIN');
       setWorkflowTrees((prev) => {
-        const nextTrees = lockNodesInTree(prev, idSet, pin);
+        const nextTrees = appendAuditTrailToNodes(
+          lockNodesInTree(prev, idSet, pin),
+          idSet,
+          session.userSignature,
+          'Verrouillé par code PIN'
+        );
         setOpenedWordDoc((opened) =>
           opened && isNodeLockedOrWithinLockedAncestor(nextTrees, opened.id) ? null : opened
         );
@@ -693,7 +783,7 @@ export default function App() {
       setWfCheckedIds(new Set());
       flashStatus(`Verrouillé (${idSet.size} élément(s)) avec code PIN à 4 chiffres.`);
     },
-    [flashStatus]
+    [session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
   const handleUnlockNode = useCallback(
@@ -702,14 +792,22 @@ export default function App() {
       if (!res.unlocked) {
         return false;
       }
-      setWorkflowTrees(res.trees);
+      pushUndoSnapshot('Déverrouillage PIN');
+      setWorkflowTrees(
+        appendAuditTrailToNodes(
+          res.trees,
+          new Set([nodeId]),
+          session.userSignature,
+          'Déverrouillé par code PIN'
+        )
+      );
       setOpenedWordDoc((prev) =>
         prev && prev.id === nodeId ? { ...prev, locked: false, lockPin: undefined } : prev
       );
       flashStatus('Élément déverrouillé — le cadenas a disparu et le fichier est modifiable.');
       return true;
     },
-    [workflowTrees, flashStatus]
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
   const handleToggleManagerReview = useCallback(
@@ -727,7 +825,15 @@ export default function App() {
           : new Set<string>();
       if (idSet.size === 0) return;
 
-      setWorkflowTrees((prev) => toggleManagerReviewInTree(prev, idSet));
+      pushUndoSnapshot('Revue manager');
+      setWorkflowTrees((prev) =>
+        appendAuditTrailToNodes(
+          toggleManagerReviewInTree(prev, idSet),
+          idSet,
+          session.userSignature,
+          'Revue manager basculée'
+        )
+      );
       setOpenedWordDoc((prev) =>
         prev && idSet.has(prev.id)
           ? { ...prev, managerReviewed: !prev.managerReviewed }
@@ -735,7 +841,7 @@ export default function App() {
       );
       flashStatus('Icône « Revue manager » mise à jour.');
     },
-    [wfCheckedIds, flashStatus]
+    [wfCheckedIds, session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
   const handleStartMoveNodes = useCallback(
@@ -775,7 +881,17 @@ export default function App() {
       }
       if (res.movedCount === 0) return;
 
-      setWorkflowTrees(res.trees);
+      pushUndoSnapshot('Déplacement');
+      const destNode = findNodeById(res.trees, destinationId);
+      setWorkflowTrees(
+        appendAuditTrailToNodes(
+          res.trees,
+          new Set(sources),
+          session.userSignature,
+          'Déplacé',
+          `Vers « ${destNode?.label || 'destination'} »`
+        )
+      );
       setWfExpandedIds((prev) => {
         const next = new Set(prev);
         const path = findNodePath(res.trees, destinationId);
@@ -785,12 +901,11 @@ export default function App() {
       });
       setMoveSourceIds([]);
       setWfCheckedIds(new Set());
-      const destNode = findNodeById(res.trees, destinationId);
       flashStatus(
         `${res.movedCount} élément(s) déplacé(s) vers « ${destNode?.label || 'destination'} » (supprimé de la source).`
       );
     },
-    [moveSourceIds, workflowTrees, flashStatus]
+    [moveSourceIds, workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
   const handleMoveNodesByDirection = useCallback(
@@ -813,7 +928,21 @@ export default function App() {
       }
       if (res.movedCount === 0) return;
 
-      setWorkflowTrees(res.trees);
+      const directionLabels: Record<NodeMoveDirection, string> = {
+        up: 'Mouvement haut',
+        down: 'Mouvement bas',
+        left: 'Mouvement gauche',
+        right: 'Mouvement droit',
+      };
+      pushUndoSnapshot(directionLabels[direction]);
+      setWorkflowTrees(
+        appendAuditTrailToNodes(
+          res.trees,
+          new Set(res.movedIds),
+          session.userSignature,
+          directionLabels[direction]
+        )
+      );
       setWfExpandedIds((prev) => {
         const next = new Set(prev);
         res.expandedParentIds.forEach((eid) => {
@@ -831,15 +960,9 @@ export default function App() {
         setHighlightedNodeId(res.movedIds[0]);
       }
 
-      const directionLabels: Record<NodeMoveDirection, string> = {
-        up: 'Mouvement haut',
-        down: 'Mouvement bas',
-        left: 'Mouvement gauche',
-        right: 'Mouvement droit',
-      };
       flashStatus(`${directionLabels[direction]} effectué (${res.movedCount} élément(s)).`);
     },
-    [workflowTrees, wfCheckedIds, flashStatus]
+    [workflowTrees, wfCheckedIds, session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
   const handleCopyPasteAction = useCallback(
@@ -879,6 +1002,7 @@ export default function App() {
       }
       if (res.pastedCount === 0) return;
 
+      pushUndoSnapshot('Collage');
       const destNode = findNodeById(workflowTrees, destId);
       setWorkflowTrees(res.trees);
       setWfExpandedIds((prev) => {
@@ -896,7 +1020,7 @@ export default function App() {
         } « ${destNode?.label || 'destination'} ».`
       );
     },
-    [workflowTrees, wfCheckedIds, clipboardIds, flashStatus]
+    [workflowTrees, wfCheckedIds, clipboardIds, pushUndoSnapshot, flashStatus]
   );
 
   const handleAddChildToNode = useCallback(
@@ -920,8 +1044,19 @@ export default function App() {
         driveId: nodeType === 'document' ? `1drv_${Math.random().toString(36).slice(2, 10)}` : undefined,
         owner: session.userSignature,
         ownerEmail: session.email,
+        status: 'todo',
+        auditTrail: [
+          {
+            id: `aud-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            actor: session.userSignature,
+            action: 'Création',
+            detail: label,
+          },
+        ],
         children: nodeType === 'document' ? undefined : [],
       };
+      pushUndoSnapshot(`Ajout « ${label} »`);
       setWorkflowTrees((prev) =>
         sortExercicesChronologically(addChildNodeToTarget(prev, effectiveTargetId, newChild))
       );
@@ -935,7 +1070,7 @@ export default function App() {
       setHighlightedNodeId(newChild.id);
       flashStatus(`Ajouté en dernière position : « ${label} ».`);
     },
-    [workflowTrees, session.userSignature, session.email, flashStatus]
+    [workflowTrees, session.userSignature, session.email, pushUndoSnapshot, flashStatus]
   );
 
   const handleAddRandomDocument = useCallback(
@@ -950,6 +1085,7 @@ export default function App() {
     (targetNodeId?: string) => {
       const blank = createBlankWorkflowNode('Workflow domaine');
       const result = addWorkflowToExercice(workflowTrees, targetNodeId, blank);
+      pushUndoSnapshot('Ajout workflow vierge');
       setWorkflowTrees(sortExercicesChronologically(result.trees));
       setWfExpandedIds((prev) => {
         const next = new Set(prev);
@@ -962,7 +1098,7 @@ export default function App() {
       setHighlightedNodeId(blank.id);
       flashStatus('Workflow vierge « Workflow domaine » ajouté (3 sections, 4 sous-sections).');
     },
-    [workflowTrees, flashStatus]
+    [workflowTrees, pushUndoSnapshot, flashStatus]
   );
 
   const handleAddNatureWorkflow = useCallback(
@@ -973,6 +1109,7 @@ export default function App() {
       const scope = rootId === 'root-team-workflow' ? 'team' : 'user';
       const node = createFullNatureWorkflowNode(natureId, scope);
       const result = addWorkflowToExercice(workflowTrees, targetNodeId, node);
+      pushUndoSnapshot(`Ajout workflow « ${meta.label} »`);
       setWorkflowTrees(sortExercicesChronologically(result.trees));
       setWfExpandedIds((prev) => {
         const next = new Set(prev);
@@ -984,7 +1121,209 @@ export default function App() {
       setHighlightedNodeId(node.id);
       flashStatus(`Workflow « ${meta.label} » ajouté avec sa structure complète.`);
     },
-    [workflowTrees, flashStatus]
+    [workflowTrees, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleSetNodesStatus = useCallback(
+    (status: WorkflowNodeStatus, fallbackNodeId?: string) => {
+      const checkedNonRoot = Array.from(wfCheckedIds).filter(
+        (id) => id !== 'root-workflow' && id !== 'root-team-workflow'
+      );
+      const idSet =
+        checkedNonRoot.length > 0
+          ? new Set(checkedNonRoot)
+          : fallbackNodeId &&
+            fallbackNodeId !== 'root-workflow' &&
+            fallbackNodeId !== 'root-team-workflow'
+          ? new Set([fallbackNodeId])
+          : new Set<string>();
+      if (idSet.size === 0) return;
+      if (hasLockedNodeInIds(workflowTrees, idSet)) {
+        flashStatus('Action bloquée : un élément verrouillé nécessite son code PIN.');
+        return;
+      }
+      pushUndoSnapshot(`Statut → ${WORKFLOW_STATUS_LABELS[status]}`);
+      setWorkflowTrees((prev) =>
+        setNodesStatusInTree(prev, idSet, status, session.userSignature)
+      );
+      flashStatus(
+        `Statut mis à jour : « ${WORKFLOW_STATUS_LABELS[status]} » (${idSet.size} élément(s)).`
+      );
+    },
+    [workflowTrees, wfCheckedIds, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleAddReviewNote = useCallback(
+    (nodeId: string, text: string) => {
+      if (isNodeLockedOrWithinLockedAncestor(workflowTrees, nodeId)) {
+        flashStatus('Action bloquée : élément verrouillé par code PIN.');
+        return;
+      }
+      pushUndoSnapshot('Ajout note de revue');
+      setWorkflowTrees((prev) =>
+        addReviewNoteToNode(prev, nodeId, session.userSignature, text)
+      );
+      flashStatus('Note de revue ajoutée.');
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleToggleReviewNote = useCallback(
+    (nodeId: string, noteId: string) => {
+      if (isNodeLockedOrWithinLockedAncestor(workflowTrees, nodeId)) {
+        flashStatus('Action bloquée : élément verrouillé par code PIN.');
+        return;
+      }
+      pushUndoSnapshot('Statut note de revue');
+      setWorkflowTrees((prev) =>
+        toggleReviewNoteStatusInTree(prev, nodeId, noteId, session.userSignature)
+      );
+      flashStatus('Statut de la note de revue mis à jour.');
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleDeleteReviewNote = useCallback(
+    (nodeId: string, noteId: string) => {
+      if (isNodeLockedOrWithinLockedAncestor(workflowTrees, nodeId)) {
+        flashStatus('Action bloquée : élément verrouillé par code PIN.');
+        return;
+      }
+      pushUndoSnapshot('Suppression note de revue');
+      setWorkflowTrees((prev) =>
+        deleteReviewNoteInTree(prev, nodeId, noteId, session.userSignature)
+      );
+      flashStatus('Note de revue supprimée.');
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleSaveVersion = useCallback(
+    (nodeId: string, summary: string) => {
+      if (isNodeLockedOrWithinLockedAncestor(workflowTrees, nodeId)) {
+        flashStatus('Action bloquée : élément verrouillé par code PIN.');
+        return;
+      }
+      const res = saveNodeVersionSnapshot(
+        workflowTrees,
+        nodeId,
+        session.userSignature,
+        summary,
+        wordBodies[nodeId] ?? ''
+      );
+      pushUndoSnapshot(`Sauvegarde ${res.versionLabel || 'version'}`);
+      setWorkflowTrees(res.trees);
+      flashStatus(`Version ${res.versionLabel || ''} enregistrée.`);
+    },
+    [workflowTrees, wordBodies, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleRestoreVersion = useCallback(
+    (nodeId: string, versionId: string) => {
+      if (isNodeLockedOrWithinLockedAncestor(workflowTrees, nodeId)) {
+        flashStatus('Restauration bloquée : élément verrouillé par code PIN.');
+        return;
+      }
+      const res = restoreNodeVersionSnapshot(
+        workflowTrees,
+        nodeId,
+        versionId,
+        session.userSignature
+      );
+      if (!res.versionLabel) return;
+      pushUndoSnapshot(`Restauration ${res.versionLabel}`);
+      setWorkflowTrees(res.trees);
+      if (res.restoredBody !== undefined) {
+        setWordBodies((prev) => ({ ...prev, [nodeId]: res.restoredBody! }));
+      }
+      setOpenedWordDoc((prev) =>
+        prev && prev.id === nodeId && res.restoredLabel
+          ? { ...prev, label: res.restoredLabel }
+          : prev
+      );
+      flashStatus(`Version ${res.versionLabel} restaurée.`);
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleAddCrossRef = useCallback(
+    (sourceId: string, targetRefId: string) => {
+      if (isNodeLockedOrWithinLockedAncestor(workflowTrees, sourceId)) {
+        flashStatus('Action bloquée : élément verrouillé par code PIN.');
+        return;
+      }
+      const targetNode = findNodeById(workflowTrees, targetRefId);
+      pushUndoSnapshot('Référence croisée');
+      setWorkflowTrees((prev) =>
+        addCrossReferenceToNode(
+          prev,
+          sourceId,
+          targetRefId,
+          session.userSignature,
+          targetNode?.label || targetRefId
+        )
+      );
+      flashStatus(`Référence croisée liée à « ${targetNode?.label || targetRefId} ».`);
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleRemoveCrossRef = useCallback(
+    (sourceId: string, targetRefId: string) => {
+      if (isNodeLockedOrWithinLockedAncestor(workflowTrees, sourceId)) {
+        flashStatus('Action bloquée : élément verrouillé par code PIN.');
+        return;
+      }
+      const targetNode = findNodeById(workflowTrees, targetRefId);
+      pushUndoSnapshot('Suppression référence croisée');
+      setWorkflowTrees((prev) =>
+        removeCrossReferenceFromNode(
+          prev,
+          sourceId,
+          targetRefId,
+          session.userSignature,
+          targetNode?.label
+        )
+      );
+      flashStatus('Référence croisée retirée.');
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleAssignNodes = useCallback(
+    (targetIds: string[], assignee: string, dueDate: string) => {
+      const idSet = new Set(targetIds);
+      if (idSet.size === 0) return;
+      if (hasLockedNodeInIds(workflowTrees, idSet)) {
+        flashStatus('Action bloquée : élément verrouillé par code PIN.');
+        return;
+      }
+      pushUndoSnapshot('Assignation / Échéance');
+      setWorkflowTrees((prev) =>
+        assignNodesInTree(prev, idSet, assignee, dueDate, session.userSignature)
+      );
+      flashStatus(
+        assignee.trim()
+          ? `Assigné à ${assignee.trim()}${dueDate ? ` (échéance ${dueDate})` : ''}.`
+          : 'Assignation effacée.'
+      );
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleJumpToNode = useCallback(
+    (targetId: string) => {
+      const path = findNodePath(workflowTrees, targetId);
+      if (path) {
+        setWfExpandedIds((prev) => {
+          const next = new Set(prev);
+          path.slice(0, -1).forEach((p) => next.add(p.id));
+          return next;
+        });
+      }
+      setHighlightedNodeId(targetId);
+    },
+    [workflowTrees]
   );
 
   const handleInitClient = useCallback(() => {
@@ -1317,6 +1656,22 @@ export default function App() {
         onClearClientKeys={handleClearClientKeys}
         highlightedNodeId={highlightedNodeId}
         statusMessage={wfStatusMessage}
+        canUndo={undoStack.length > 0}
+        undoLabel={undoStack[undoStack.length - 1]?.label}
+        canRedo={redoStack.length > 0}
+        redoLabel={redoStack[redoStack.length - 1]?.label}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onSetNodesStatus={handleSetNodesStatus}
+        onAddReviewNote={handleAddReviewNote}
+        onToggleReviewNote={handleToggleReviewNote}
+        onDeleteReviewNote={handleDeleteReviewNote}
+        onSaveVersion={handleSaveVersion}
+        onRestoreVersion={handleRestoreVersion}
+        onAddCrossRef={handleAddCrossRef}
+        onRemoveCrossRef={handleRemoveCrossRef}
+        onAssignNodes={handleAssignNodes}
+        onJumpToNode={handleJumpToNode}
       />
     </div>
   );

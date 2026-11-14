@@ -20,6 +20,35 @@ export type WorkflowNodeType =
   | 'signature'
   | 'document';
 
+export type WorkflowNodeStatus = 'todo' | 'in-progress' | 'in-review' | 'validated';
+
+export interface ReviewNoteItem {
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+  status: 'open' | 'resolved';
+  resolvedAt?: string;
+}
+
+export interface NodeVersionEntry {
+  id: string;
+  versionLabel: string;
+  author: string;
+  timestamp: string;
+  summary: string;
+  labelSnapshot: string;
+  wordBodySnapshot: string;
+}
+
+export interface AuditTrailEntry {
+  id: string;
+  timestamp: string;
+  actor: string;
+  action: string;
+  detail?: string;
+}
+
 export interface WorkflowTreeNode {
   id: string;
   label: string;
@@ -32,6 +61,13 @@ export interface WorkflowTreeNode {
   locked?: boolean;
   lockPin?: string;
   managerReviewed?: boolean;
+  status?: WorkflowNodeStatus;
+  reviewNotes?: ReviewNoteItem[];
+  versions?: NodeVersionEntry[];
+  crossRefs?: string[];
+  assignee?: string;
+  dueDate?: string;
+  auditTrail?: AuditTrailEntry[];
   children?: WorkflowTreeNode[];
 }
 
