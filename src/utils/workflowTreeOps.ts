@@ -615,6 +615,325 @@ export function pasteNodesToTarget(
   };
 }
 
+export type NodeMoveDirection = 'up' | 'down' | 'left' | 'right';
+
+function replaceChildrenOfNode(
+  nodes: WorkflowTreeNode[],
+  targetParentId: string,
+  updater: (children: WorkflowTreeNode[]) => WorkflowTreeNode[]
+): WorkflowTreeNode[] {
+  return nodes.map((node) => {
+    if (node.id === targetParentId) {
+      return {
+        ...node,
+        children: updater(node.children || []),
+      };
+    }
+    if (node.children?.length) {
+      return {
+        ...node,
+        children: replaceChildrenOfNode(node.children, targetParentId, updater),
+      };
+    }
+    return node;
+  });
+}
+
+function moveSingleNodeByDirection(
+  nodes: WorkflowTreeNode[],
+  nodeId: string,
+  direction: NodeMoveDirection
+): {
+  trees: WorkflowTreeNode[];
+  moved: boolean;
+  expandedParentIds: string[];
+  error?: string;
+} {
+  const path = findNodePath(nodes, nodeId);
+  if (!path || path.length < 2) {
+    return {
+      trees: nodes,
+      moved: false,
+      expandedParentIds: [],
+      error: 'Les racines principales ne peuvent pas être déplacées.',
+    };
+  }
+
+  const node = path[path.length - 1];
+  const parent = path[path.length - 2];
+  const grandParent = path.length >= 3 ? path[path.length - 3] : null;
+  const siblings = parent.children || [];
+  const idx = siblings.findIndex((c) => c.id === nodeId);
+
+  if (idx < 0) {
+    return { trees: nodes, moved: false, expandedParentIds: [] };
+  }
+
+  if (direction === 'up') {
+    if (idx > 0) {
+      const updated = replaceChildrenOfNode(nodes, parent.id, (children) => {
+        const next = [...children];
+        [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+        return next;
+      });
+      return { trees: updated, moved: true, expandedParentIds: [parent.id] };
+    }
+
+    if (!grandParent || parent.nodeType === 'root') {
+      return {
+        trees: nodes,
+        moved: false,
+        expandedParentIds: [],
+        error: 'Élément déjà en première position sous la racine.',
+      };
+    }
+
+    if (isNodeLockedOrWithinLockedAncestor(nodes, grandParent.id)) {
+      return {
+        trees: nodes,
+        moved: false,
+        expandedParentIds: [],
+        error: 'Déplacement bloqué : niveau parent verrouillé par code PIN.',
+      };
+    }
+
+    let updated = replaceChildrenOfNode(nodes, parent.id, (children) =>
+      children.filter((c) => c.id !== nodeId)
+    );
+    updated = replaceChildrenOfNode(updated, grandParent.id, (children) => {
+      const pIdx = children.findIndex((c) => c.id === parent.id);
+      const next = [...children];
+      next.splice(pIdx >= 0 ? pIdx : 0, 0, node);
+      return next;
+    });
+
+    return { trees: updated, moved: true, expandedParentIds: [grandParent.id] };
+  }
+
+  if (direction === 'down') {
+    if (idx < siblings.length - 1) {
+      const updated = replaceChildrenOfNode(nodes, parent.id, (children) => {
+        const next = [...children];
+        [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+        return next;
+      });
+      return { trees: updated, moved: true, expandedParentIds: [parent.id] };
+    }
+
+    if (!grandParent || parent.nodeType === 'root') {
+      return {
+        trees: nodes,
+        moved: false,
+        expandedParentIds: [],
+        error: 'Élément déjà en dernière position sous la racine.',
+      };
+    }
+
+    if (isNodeLockedOrWithinLockedAncestor(nodes, grandParent.id)) {
+      return {
+        trees: nodes,
+        moved: false,
+        expandedParentIds: [],
+        error: 'Déplacement bloqué : niveau parent verrouillé par code PIN.',
+      };
+    }
+
+    const gpChildren = grandParent.children || [];
+    const pIdx = gpChildren.findIndex((c) => c.id === parent.id);
+    const nextUncle = pIdx >= 0 && pIdx < gpChildren.length - 1 ? gpChildren[pIdx + 1] : null;
+
+    if (nextUncle && nextUncle.nodeType !== 'document') {
+      if (nextUncle.locked || isNodeLockedOrWithinLockedAncestor(nodes, nextUncle.id)) {
+        return {
+          trees: nodes,
+          moved: false,
+          expandedParentIds: [],
+          error: `Déplacement bloqué : « ${nextUncle.label} » est verrouillé par code PIN.`,
+        };
+      }
+
+      let updated = replaceChildrenOfNode(nodes, parent.id, (children) =>
+        children.filter((c) => c.id !== nodeId)
+      );
+      updated = replaceChildrenOfNode(updated, nextUncle.id, (children) => [
+        node,
+        ...children,
+      ]);
+
+      return {
+        trees: updated,
+        moved: true,
+        expandedParentIds: [grandParent.id, nextUncle.id],
+      };
+    }
+
+    let updated = replaceChildrenOfNode(nodes, parent.id, (children) =>
+      children.filter((c) => c.id !== nodeId)
+    );
+    updated = replaceChildrenOfNode(updated, grandParent.id, (children) => {
+      const curPIdx = children.findIndex((c) => c.id === parent.id);
+      const next = [...children];
+      next.splice(curPIdx >= 0 ? curPIdx + 1 : next.length, 0, node);
+      return next;
+    });
+
+    return { trees: updated, moved: true, expandedParentIds: [grandParent.id] };
+  }
+
+  if (direction === 'left') {
+    if (!grandParent || parent.nodeType === 'root') {
+      return {
+        trees: nodes,
+        moved: false,
+        expandedParentIds: [],
+        error: 'Niveau minimum atteint : impossible de déplacer plus à gauche que la racine.',
+      };
+    }
+
+    if (isNodeLockedOrWithinLockedAncestor(nodes, grandParent.id)) {
+      return {
+        trees: nodes,
+        moved: false,
+        expandedParentIds: [],
+        error: 'Déplacement bloqué : niveau cible verrouillé par code PIN.',
+      };
+    }
+
+    let updated = replaceChildrenOfNode(nodes, parent.id, (children) =>
+      children.filter((c) => c.id !== nodeId)
+    );
+    updated = replaceChildrenOfNode(updated, grandParent.id, (children) => {
+      const pIdx = children.findIndex((c) => c.id === parent.id);
+      const next = [...children];
+      next.splice(pIdx >= 0 ? pIdx + 1 : next.length, 0, node);
+      return next;
+    });
+
+    return { trees: updated, moved: true, expandedParentIds: [grandParent.id] };
+  }
+
+  // direction === 'right'
+  if (idx === 0) {
+    return {
+      trees: nodes,
+      moved: false,
+      expandedParentIds: [],
+      error: 'Aucun élément précédent au même niveau pour recevoir cet élément.',
+    };
+  }
+
+  const prevSibling = siblings[idx - 1];
+  if (prevSibling.locked || isNodeLockedOrWithinLockedAncestor(nodes, prevSibling.id)) {
+    return {
+      trees: nodes,
+      moved: false,
+      expandedParentIds: [],
+      error: `Déplacement bloqué : « ${prevSibling.label} » est verrouillé par code PIN.`,
+    };
+  }
+
+  if (prevSibling.nodeType === 'document' && node.nodeType !== 'document') {
+    return {
+      trees: nodes,
+      moved: false,
+      expandedParentIds: [],
+      error: 'Hiérarchie invalide : un dossier ne peut pas devenir le fils d’un document.',
+    };
+  }
+
+  let updated = replaceChildrenOfNode(nodes, parent.id, (children) =>
+    children.filter((c) => c.id !== nodeId)
+  );
+  updated = replaceChildrenOfNode(updated, prevSibling.id, (children) => [
+    ...children,
+    node,
+  ]);
+
+  return {
+    trees: updated,
+    moved: true,
+    expandedParentIds: [parent.id, prevSibling.id],
+  };
+}
+
+export function moveNodesByDirection(
+  nodes: WorkflowTreeNode[],
+  sourceIds: string[],
+  direction: NodeMoveDirection
+): {
+  trees: WorkflowTreeNode[];
+  movedCount: number;
+  expandedParentIds: string[];
+  movedIds: string[];
+  error?: string;
+} {
+  const validIds = sourceIds.filter((id) => {
+    const found = findNodeById(nodes, id);
+    return Boolean(found && found.nodeType !== 'root');
+  });
+
+  if (validIds.length === 0) {
+    return {
+      trees: nodes,
+      movedCount: 0,
+      expandedParentIds: [],
+      movedIds: [],
+      error: 'Les racines principales ne peuvent pas être déplacées.',
+    };
+  }
+
+  if (hasLockedNodeInIds(nodes, validIds)) {
+    return {
+      trees: nodes,
+      movedCount: 0,
+      expandedParentIds: [],
+      movedIds: [],
+      error: 'Déplacement bloqué : un élément verrouillé nécessite son code PIN.',
+    };
+  }
+
+  const preOrderIndex = new Map<string, number>();
+  let orderCounter = 0;
+  const indexWalk = (list: WorkflowTreeNode[]) => {
+    for (const item of list) {
+      preOrderIndex.set(item.id, orderCounter++);
+      if (item.children?.length) indexWalk(item.children);
+    }
+  };
+  indexWalk(nodes);
+
+  const orderedIds = [...validIds].sort((a, b) => {
+    const diff = (preOrderIndex.get(a) ?? 0) - (preOrderIndex.get(b) ?? 0);
+    return direction === 'down' || direction === 'left' ? -diff : diff;
+  });
+
+  let updated = nodes;
+  let movedCount = 0;
+  const expandedSet = new Set<string>();
+  const movedIds: string[] = [];
+  let firstError: string | undefined;
+
+  for (const id of orderedIds) {
+    const res = moveSingleNodeByDirection(updated, id, direction);
+    if (res.moved) {
+      updated = res.trees;
+      movedCount += 1;
+      movedIds.push(id);
+      res.expandedParentIds.forEach((eid) => expandedSet.add(eid));
+    } else if (res.error && !firstError) {
+      firstError = res.error;
+    }
+  }
+
+  return {
+    trees: updated,
+    movedCount,
+    expandedParentIds: Array.from(expandedSet),
+    movedIds,
+    error: movedCount === 0 ? firstError : undefined,
+  };
+}
+
 const RANDOM_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 const RANDOM_MISSION_STEPS = [

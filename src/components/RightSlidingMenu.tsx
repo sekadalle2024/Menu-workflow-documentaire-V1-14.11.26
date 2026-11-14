@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Archive,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ArrowRightLeft,
+  ArrowUp,
   Check,
   ChevronDown,
   ChevronRight,
@@ -9,12 +14,14 @@ import {
   ClipboardCheck,
   ClipboardCopy,
   CopyPlus,
+  Database,
   Dices,
   Download,
   ExternalLink,
   FileSpreadsheet,
   Folder,
   FolderOpen,
+  FolderUp,
   FileText,
   KeyRound,
   Lock,
@@ -27,11 +34,13 @@ import {
   Search,
   Trash2,
   Unlock,
+  Upload,
   UserCheck,
   Users,
   X,
 } from 'lucide-react';
 import { WORKFLOW_SIDEBAR_ITEMS } from '../data/workflowCatalog';
+import { FeuilleCouvertureDocument } from '../data/feuilleCouvertureTemplates';
 import {
   ClientSessionConfig,
   WorkflowNatureId,
@@ -43,7 +52,9 @@ import {
   getWorkflowCheckState,
   hasLockedNodeInIds,
   isNodeLockedOrWithinLockedAncestor,
+  NodeMoveDirection,
 } from '../utils/workflowTreeOps';
+import { IntegratedDataViewer } from './IntegratedDataViewer';
 
 interface TriCheckboxProps {
   state: 'checked' | 'unchecked' | 'indeterminate';
@@ -99,6 +110,7 @@ interface RightSlidingMenuProps {
   moveSourceIds: string[];
   onStartMoveNodes: (fallbackNodeId?: string) => void;
   onMoveToTarget: (destinationId: string, explicitSourceId?: string) => void;
+  onMoveNodesByDirection: (direction: NodeMoveDirection, fallbackNodeId?: string) => void;
   onClearMoveSource: () => void;
   clipboardIds: string[];
   onCopyPasteAction: (fallbackNodeId?: string) => void;
@@ -108,10 +120,19 @@ interface RightSlidingMenuProps {
   onUnlockNode: (nodeId: string, pin: string) => boolean;
   onToggleManagerReview: (fallbackNodeId?: string) => void;
   openedWordDoc: WorkflowTreeNode | null;
+  wordBodies: Record<string, string>;
+  onUpdateWordBody: (docId: string, content: string) => void;
   onOpenWordDoc: (node: WorkflowTreeNode) => void;
   onCloseWordDoc: () => void;
+  integratedDataDoc: { node: WorkflowTreeNode; data: FeuilleCouvertureDocument } | null;
+  onIntegrateData: (node: WorkflowTreeNode) => void;
+  onRegenerateIntegratedData: () => void;
+  onCloseIntegratedData: () => void;
   onOpenDocumentInChat: (node: WorkflowTreeNode) => void;
   onDownloadNodes: (fallbackNodeId?: string) => void;
+  onExportArchive: (fallbackNodeId?: string) => void;
+  onImportFilesToNode: (targetId: string, files: FileList) => void;
+  onImportDirectoryToNode: (targetId: string, files: FileList) => void;
   onDuplicateNodes: (fallbackNodeId?: string) => void;
   onDeleteNodes: (fallbackNodeId?: string) => void;
   onRenameNode: (nodeId: string, newLabel: string) => void;
@@ -159,6 +180,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   moveSourceIds,
   onStartMoveNodes,
   onMoveToTarget,
+  onMoveNodesByDirection,
   onClearMoveSource,
   clipboardIds,
   onCopyPasteAction,
@@ -168,10 +190,19 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   onUnlockNode,
   onToggleManagerReview,
   openedWordDoc,
+  wordBodies,
+  onUpdateWordBody,
   onOpenWordDoc,
   onCloseWordDoc,
+  integratedDataDoc,
+  onIntegrateData,
+  onRegenerateIntegratedData,
+  onCloseIntegratedData,
   onOpenDocumentInChat,
   onDownloadNodes,
+  onExportArchive,
+  onImportFilesToNode,
+  onImportDirectoryToNode,
   onDuplicateNodes,
   onDeleteNodes,
   onRenameNode,
@@ -201,7 +232,6 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     kind: 'document' | 'section' | 'sous-section' | 'exercice' | 'sub-exercice';
   } | null>(null);
   const [addLabelDraft, setAddLabelDraft] = useState('');
-  const [wordBodies, setWordBodies] = useState<Record<string, string>>({});
 
   const [pinPrompt, setPinPrompt] = useState<{
     mode: 'lock' | 'unlock';
@@ -217,6 +247,9 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [showNatureSubmenu, setShowNatureSubmenu] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const importDirInputRef = useRef<HTMLInputElement | null>(null);
+  const importTargetIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     setUserKeyDraft(session.userApiKey);
@@ -628,6 +661,38 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
 
   return (
     <>
+      <input
+        ref={importInputRef}
+        type="file"
+        multiple
+        accept=".zip,.json,.txt,.md,.csv,.doc,.docx,.pdf,.xlsx"
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files;
+          const targetId = importTargetIdRef.current;
+          if (files && files.length > 0 && targetId) {
+            onImportFilesToNode(targetId, files);
+          }
+          e.target.value = '';
+        }}
+      />
+
+      <input
+        ref={importDirInputRef}
+        type="file"
+        multiple
+        {...({ webkitdirectory: '', directory: '' } as React.InputHTMLAttributes<HTMLInputElement>)}
+        className="hidden"
+        onChange={(e) => {
+          const files = e.target.files;
+          const targetId = importTargetIdRef.current;
+          if (files && files.length > 0 && targetId) {
+            onImportDirectoryToNode(targetId, files);
+          }
+          e.target.value = '';
+        }}
+      />
+
       <div
         aria-hidden={!isOpen}
         onClick={onClose}
@@ -640,9 +705,9 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
         id="dossier-mission-panel"
         aria-label="Menu coulissant — Workflows documentaires"
         aria-hidden={!isOpen}
-        className={`fixed top-0 right-0 z-50 flex h-full w-full max-w-[780px] flex-col border-l border-slate-800 bg-slate-900 text-slate-100 shadow-2xl transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
+        className={`fixed top-0 right-0 z-50 flex h-full w-full flex-col border-l border-slate-800 bg-slate-900 text-slate-100 shadow-2xl transition-[transform,max-width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          openedWordDoc || integratedDataDoc ? 'max-w-[1360px]' : 'max-w-[780px]'
+        } ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
       >
         {/* Header identité & accès API — INCHANGÉ */}
         <div className="flex items-center justify-between gap-4 border-b border-slate-800 px-5 py-3.5">
@@ -946,120 +1011,136 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
           )}
         </div>
 
-        {/* Simulation d'un document Word vierge ouvert AU-DESSUS de la TreeView */}
-        {openedWordDoc && (
-          <div
-            aria-label={`Document Word simulé : ${openedWordDoc.label}`}
-            className="border-b border-slate-700 bg-slate-950 px-4 py-3"
-          >
-            <div className="overflow-hidden rounded-lg border border-slate-700 bg-white text-slate-900 shadow-lg">
-              <div className="flex items-center justify-between gap-2 bg-[#185ABD] px-3 py-1.5 text-xs text-white">
-                <div className="flex min-w-0 items-center gap-2">
-                  <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white/15 font-serif text-[11px] font-bold">
-                    W
-                  </span>
-                  <span className="truncate font-medium" title={`${openedWordDoc.label}.docx`}>
-                    {openedWordDoc.label}.docx
-                  </span>
-                  {openedWordDoc.locked && (
-                    <Lock className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-label="Verrouillé" />
-                  )}
-                  {openedWordDoc.managerReviewed && (
-                    <ClipboardCheck
-                      className="h-3.5 w-3.5 shrink-0 text-emerald-300"
-                      aria-label="Revue manager"
-                    />
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => onOpenDocumentInChat(openedWordDoc)}
-                    className="rounded bg-white/15 px-2 py-0.5 text-[11px] font-medium hover:bg-white/25 cursor-pointer"
-                  >
-                    Envoyer au chat
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onCloseWordDoc}
-                    aria-label="Fermer le document Word simulé"
-                    className="rounded p-0.5 hover:bg-white/20 cursor-pointer"
-                  >
-                    <X className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-100 px-3 py-1 text-[11px] text-slate-600">
-                <div className="flex items-center gap-2">
-                  <span className="rounded border border-slate-300 bg-white px-1.5 py-0.5 font-sans">
-                    Calibri · 11
-                  </span>
-                  <span className="font-bold">G</span>
-                  <span className="italic">I</span>
-                  <span className="underline">S</span>
-                </div>
-                <span className="font-mono text-[10px] text-slate-500">
-                  {openedWordDoc.locked
-                    ? 'Lecture seule (verrouillé par PIN)'
-                    : `Document vierge · [${openedWordDoc.owner || session.userSignature}]`}
-                </span>
-              </div>
-
-              <div className="bg-slate-200/70 p-2.5">
-                <div className="mx-auto rounded border border-slate-300 bg-white px-4 py-3 shadow-xs">
-                  <div className="border-b border-slate-200 pb-1.5">
-                    <div className="text-xs font-bold text-slate-900">
-                      {openedWordDoc.label}
-                    </div>
-                    <div className="mt-0.5 text-[10px] text-slate-500">
-                      Réf. Drive : {openedWordDoc.driveId || 'N/A'} · Client : {session.client}
-                    </div>
+        {/* Zone principale : Document Word / Data (large fenêtre) + Arborescence */}
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          {/* Simulation d'un document Word vierge ouvert AU-DESSUS (mobile) / GRANDE FENÊTRE (desktop) */}
+          {openedWordDoc && (
+            <div
+              aria-label={`Document Word simulé : ${openedWordDoc.label}`}
+              className="flex min-h-0 flex-1 flex-col border-b border-slate-700 bg-slate-950 p-3 lg:border-b-0 lg:border-r lg:border-slate-800 lg:p-4"
+            >
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-700 bg-white text-slate-900 shadow-lg">
+                <div className="flex shrink-0 items-center justify-between gap-2 bg-[#185ABD] px-3.5 py-2 text-xs text-white">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white/15 font-serif text-[11px] font-bold">
+                      W
+                    </span>
+                    <span className="truncate font-medium" title={`${openedWordDoc.label}.docx`}>
+                      {openedWordDoc.label}.docx
+                    </span>
+                    {openedWordDoc.locked && (
+                      <Lock className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-label="Verrouillé" />
+                    )}
+                    {openedWordDoc.managerReviewed && (
+                      <ClipboardCheck
+                        className="h-3.5 w-3.5 shrink-0 text-emerald-300"
+                        aria-label="Revue manager"
+                      />
+                    )}
                   </div>
-                  <textarea
-                    rows={3}
-                    readOnly={Boolean(openedWordDoc.locked)}
-                    value={wordBodies[openedWordDoc.id] ?? ''}
-                    onChange={(e) =>
-                      setWordBodies((prev) => ({
-                        ...prev,
-                        [openedWordDoc.id]: e.target.value,
-                      }))
-                    }
-                    placeholder={
-                      openedWordDoc.locked
-                        ? 'Document verrouillé — déverrouillez avec le code PIN pour modifier.'
-                        : "Document vierge simulé — saisissez vos observations, constats ou tests d'audit..."
-                    }
-                    className={`mt-2 w-full resize-none border-0 bg-transparent text-xs placeholder:text-slate-400 focus:outline-none ${
-                      openedWordDoc.locked ? 'cursor-not-allowed text-slate-500' : 'text-slate-800'
-                    }`}
-                  />
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onOpenDocumentInChat(openedWordDoc)}
+                      className="rounded bg-white/15 px-2.5 py-0.5 text-[11px] font-medium hover:bg-white/25 cursor-pointer"
+                    >
+                      Envoyer au chat
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onCloseWordDoc}
+                      aria-label="Fermer le document Word simulé"
+                      className="rounded p-0.5 hover:bg-white/20 cursor-pointer"
+                    >
+                      <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-100 px-3.5 py-1.5 text-[11px] text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <span className="rounded border border-slate-300 bg-white px-1.5 py-0.5 font-sans">
+                      Calibri · 11
+                    </span>
+                    <span className="font-bold">G</span>
+                    <span className="italic">I</span>
+                    <span className="underline">S</span>
+                    <span className="ml-2 hidden text-[10px] text-slate-500 sm:inline">
+                      Mise en page · A4 Portrait (100 %)
+                    </span>
+                  </div>
+                  <span className="font-mono text-[10px] text-slate-500">
+                    {openedWordDoc.locked
+                      ? 'Lecture seule (verrouillé par PIN)'
+                      : `Document vierge · [${openedWordDoc.owner || session.userSignature}]`}
+                  </span>
+                </div>
+
+                <div className="max-h-[55vh] flex-1 overflow-y-auto bg-slate-200/85 p-4 lg:max-h-none lg:p-6">
+                  <div className="mx-auto flex min-h-[480px] max-w-[794px] flex-col rounded border border-slate-300 bg-white px-8 py-7 shadow-md lg:min-h-full lg:px-12 lg:py-10">
+                    <div className="border-b border-slate-200 pb-3">
+                      <div className="text-base font-bold text-slate-900">
+                        {openedWordDoc.label}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        Réf. Drive : {openedWordDoc.driveId || 'N/A'} · Client : {session.client}
+                      </div>
+                    </div>
+                    <textarea
+                      rows={18}
+                      readOnly={Boolean(openedWordDoc.locked)}
+                      value={wordBodies[openedWordDoc.id] ?? ''}
+                      onChange={(e) => onUpdateWordBody(openedWordDoc.id, e.target.value)}
+                      placeholder={
+                        openedWordDoc.locked
+                          ? 'Document verrouillé — déverrouillez avec le code PIN pour modifier.'
+                          : "Document vierge simulé — saisissez vos observations, constats ou tests d'audit..."
+                      }
+                      className={`mt-5 min-h-[380px] w-full flex-1 resize-none border-0 bg-transparent text-sm leading-relaxed placeholder:text-slate-400 focus:outline-none ${
+                        openedWordDoc.locked ? 'cursor-not-allowed text-slate-500' : 'text-slate-800'
+                      }`}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Arborescence Workflow & Team Workflow */}
-        <div
-          role="tree"
-          aria-label="Arborescence Workflow et Team Workflow"
-          onScroll={() => contextMenu && setContextMenu(null)}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            openContextMenuAt(e.clientX, e.clientY, null);
-          }}
-          className="flex-1 space-y-1 overflow-y-auto px-4 py-3"
-        >
-          {visibleRoots.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-slate-700 p-6 text-center text-xs text-slate-400">
-              Aucune clé API active. Cliquez sur « Clés API » puis sur « Initialisation client » pour
-              afficher les workflows de l&apos;entité.
-            </div>
-          ) : (
-            visibleRoots.map((root) => renderNode(root, 0))
           )}
+
+          {/* Interface Intégrer data (collecte JSON Feuille couverture) */}
+          {integratedDataDoc && (
+            <IntegratedDataViewer
+              docNode={integratedDataDoc.node}
+              data={integratedDataDoc.data}
+              onRegenerate={onRegenerateIntegratedData}
+              onSendToChat={onOpenDocumentInChat}
+              onClose={onCloseIntegratedData}
+            />
+          )}
+
+          {/* Arborescence Workflow & Team Workflow */}
+          <div
+            role="tree"
+            aria-label="Arborescence Workflow et Team Workflow"
+            onScroll={() => contextMenu && setContextMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              openContextMenuAt(e.clientX, e.clientY, null);
+            }}
+            className={`space-y-1 overflow-y-auto px-4 py-3 ${
+              openedWordDoc || integratedDataDoc
+                ? 'min-h-[180px] shrink-0 lg:w-[390px] lg:flex-none'
+                : 'flex-1'
+            }`}
+          >
+            {visibleRoots.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-700 p-6 text-center text-xs text-slate-400">
+                Aucune clé API active. Cliquez sur « Clés API » puis sur « Initialisation client » pour
+                afficher les workflows de l&apos;entité.
+              </div>
+            ) : (
+              visibleRoots.map((root) => renderNode(root, 0))
+            )}
+          </div>
         </div>
       </aside>
 
@@ -1235,19 +1316,35 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
 
               <div className="border-t border-slate-800 py-1">
                 {ctxNode.nodeType !== 'root' && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={nodeEffectivelyLocked}
-                    onClick={() => {
-                      onOpenWordDoc(ctxNode);
-                      setContextMenu(null);
-                    }}
-                    className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
-                  >
-                    <FileSpreadsheet className="h-3.5 w-3.5 text-blue-400" aria-hidden="true" />
-                    <span>Ouvrir (Document Word)</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={nodeEffectivelyLocked}
+                      onClick={() => {
+                        onOpenWordDoc(ctxNode);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5 text-blue-400" aria-hidden="true" />
+                      <span>Ouvrir (Document Word)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={nodeEffectivelyLocked}
+                      onClick={() => {
+                        onIntegrateData(ctxNode);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                    >
+                      <Database className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                      <span>Intégrer data</span>
+                    </button>
+                  </>
                 )}
 
                 {ctxNode.nodeType === 'document' && (
@@ -1277,6 +1374,52 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                 >
                   <Download className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                   <span>Télécharger</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={
+                    ctxNode.nodeType === 'root' ? nodeEffectivelyLocked : actionBlockedByLock
+                  }
+                  onClick={() => {
+                    onExportArchive(ctxNode.id);
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <Archive className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" />
+                  <span>Exporter (archive .zip)</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={nodeEffectivelyLocked}
+                  onClick={() => {
+                    importTargetIdRef.current = ctxNode.id;
+                    setContextMenu(null);
+                    importInputRef.current?.click();
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <Upload className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                  <span>Importer fichier(s) / .zip</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={nodeEffectivelyLocked}
+                  onClick={() => {
+                    importTargetIdRef.current = ctxNode.id;
+                    setContextMenu(null);
+                    importDirInputRef.current?.click();
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <FolderUp className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                  <span>Importer dossier</span>
                 </button>
 
                 {(ctxNode.nodeType !== 'root' || clipboardIds.length > 0) && (
@@ -1315,6 +1458,63 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                     <Move className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
                     <span>Déplacer (couper / glisser)</span>
                   </button>
+                )}
+
+                {ctxNode.nodeType !== 'root' && (
+                  <div className="my-1 border-y border-slate-800/80 py-1">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={actionBlockedByLock}
+                      onClick={() => {
+                        onMoveNodesByDirection('up', ctxNode.id);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                    >
+                      <ArrowUp className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                      <span>Mouvement haut</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={actionBlockedByLock}
+                      onClick={() => {
+                        onMoveNodesByDirection('down', ctxNode.id);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                    >
+                      <ArrowDown className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                      <span>Mouvement bas</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={actionBlockedByLock}
+                      onClick={() => {
+                        onMoveNodesByDirection('left', ctxNode.id);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                    >
+                      <ArrowLeft className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                      <span>Mouvement gauche</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={actionBlockedByLock}
+                      onClick={() => {
+                        onMoveNodesByDirection('right', ctxNode.id);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                    >
+                      <ArrowRight className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                      <span>Mouvement droit</span>
+                    </button>
+                  </div>
                 )}
 
                 {moveSourceIds.length > 0 && (

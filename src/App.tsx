@@ -19,6 +19,10 @@ import {
   createInitialWorkflowTrees,
 } from './data/workflowCatalog';
 import {
+  FeuilleCouvertureDocument,
+  generateRandomFeuilleCouvertureJson,
+} from './data/feuilleCouvertureTemplates';
+import {
   AccordionMode,
   ActiveWorkspaceTab,
   AuditChatMessage,
@@ -55,9 +59,12 @@ import {
   findNodePath,
   generateRandomAuditDocumentName,
   hasLockedNodeInIds,
+  insertNodesAtTarget,
   isNodeLockedOrWithinLockedAncestor,
   lockNodesInTree,
+  moveNodesByDirection,
   moveNodesToTarget,
+  NodeMoveDirection,
   pasteNodesToTarget,
   renameNodeInTree,
   resolveContainerTargetId,
@@ -68,6 +75,11 @@ import {
   transferNodesToTarget,
   unlockNodeInTree,
 } from './utils/workflowTreeOps';
+import {
+  buildArchiveZipBlob,
+  parseImportedDirectory,
+  parseImportedFiles,
+} from './utils/workflowArchive';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveWorkspaceTab>('workspace');
@@ -111,6 +123,11 @@ export default function App() {
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
   const [wfStatusMessage, setWfStatusMessage] = useState<string | null>(null);
   const [openedWordDoc, setOpenedWordDoc] = useState<WorkflowTreeNode | null>(null);
+  const [wordBodies, setWordBodies] = useState<Record<string, string>>({});
+  const [integratedDataDoc, setIntegratedDataDoc] = useState<{
+    node: WorkflowTreeNode;
+    data: FeuilleCouvertureDocument;
+  } | null>(null);
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
@@ -325,12 +342,43 @@ export default function App() {
         flashStatus('Ouverture bloquée : élément verrouillé par code PIN.');
         return;
       }
+      setIntegratedDataDoc(null);
       setOpenedWordDoc(docNode);
       setHighlightedNodeId(docNode.id);
       flashStatus(`Document Word simulé ouvert : « ${docNode.label}.docx »`);
     },
     [workflowTrees, flashStatus]
   );
+
+  const handleIntegrateData = useCallback(
+    (docNode: WorkflowTreeNode) => {
+      if (isNodeLockedOrWithinLockedAncestor(workflowTrees, docNode.id) || docNode.locked) {
+        flashStatus('Action bloquée : élément verrouillé par code PIN.');
+        return;
+      }
+      const generated = generateRandomFeuilleCouvertureJson(docNode.label, docNode.driveId);
+      const ref =
+        generated['Etape mission - Feuille couverture'].find((e) => 'table 1' in e)?.['table 1']?.[0]
+          ?.Reference || 'Feuille couverture';
+      setOpenedWordDoc(null);
+      setIntegratedDataDoc({ node: docNode, data: generated });
+      setHighlightedNodeId(docNode.id);
+      flashStatus(`Data JSON collectée pour « ${docNode.label} » (${ref.split(' - ')[0]}).`);
+    },
+    [workflowTrees, flashStatus]
+  );
+
+  const handleRegenerateIntegratedData = useCallback(() => {
+    setIntegratedDataDoc((prev) => {
+      if (!prev) return null;
+      const generated = generateRandomFeuilleCouvertureJson(prev.node.label, prev.node.driveId);
+      const ref =
+        generated['Etape mission - Feuille couverture'].find((e) => 'table 1' in e)?.['table 1']?.[0]
+          ?.Reference || 'Feuille couverture';
+      flashStatus(`Nouveau JSON généré aléatoirement (${ref.split(' - ')[0]}).`);
+      return { node: prev.node, data: generated };
+    });
+  }, [flashStatus]);
 
   const handleOpenDocumentInChat = useCallback(
     (docNode: WorkflowTreeNode) => {
@@ -379,6 +427,143 @@ export default function App() {
       flashStatus(`document telecharge (${selectedNodes.length} élément(s) · ${selectedNodes[0].label})`);
     },
     [wfCheckedIds, workflowTrees, session.client, session.email, flashStatus]
+  );
+
+  const handleExportArchive = useCallback(
+    async (fallbackNodeId?: string) => {
+      const checkedTopLevel = filterTopLevelSelectedIds(workflowTrees, wfCheckedIds);
+      const targetIds =
+        checkedTopLevel.length > 0
+          ? checkedTopLevel
+          : fallbackNodeId
+          ? [fallbackNodeId]
+          : [];
+      const selectedNodes = targetIds
+        .map((id) => findNodeById(workflowTrees, id))
+        .filter((n): n is WorkflowTreeNode => Boolean(n));
+      if (selectedNodes.length === 0) return;
+
+      const hasLocked = selectedNodes.some((n) =>
+        n.nodeType === 'root' ? false : hasLockedNodeInIds(workflowTrees, [n.id])
+      );
+      if (hasLocked) {
+        flashStatus('Export bloqué : un élément verrouillé nécessite son code PIN.');
+        return;
+      }
+
+      try {
+        const { blob, filename } = await buildArchiveZipBlob(selectedNodes, wordBodies, {
+          client: session.client,
+          email: session.email,
+          signature: session.userSignature,
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        flashStatus(`Archive exportée dans les téléchargements : ${filename}`);
+      } catch {
+        flashStatus("Erreur lors de la création de l'archive ZIP.");
+      }
+    },
+    [
+      wfCheckedIds,
+      workflowTrees,
+      wordBodies,
+      session.client,
+      session.email,
+      session.userSignature,
+      flashStatus,
+    ]
+  );
+
+  const handleImportFilesToNode = useCallback(
+    async (targetId: string, files: FileList) => {
+      if (!targetId || files.length === 0) return;
+      if (isNodeLockedOrWithinLockedAncestor(workflowTrees, targetId)) {
+        flashStatus('Import bloqué : la destination est verrouillée par code PIN.');
+        return;
+      }
+      try {
+        const { nodes: importedNodes, restoredWordBodies } = await parseImportedFiles(
+          files,
+          session.userSignature,
+          session.email
+        );
+        if (importedNodes.length === 0) {
+          flashStatus('Aucun fichier ou dossier valide détecté dans la sélection.');
+          return;
+        }
+        const targetNode = findNodeById(workflowTrees, targetId);
+        setWorkflowTrees((prev) =>
+          sortExercicesChronologically(insertNodesAtTarget(prev, targetId, importedNodes))
+        );
+        if (Object.keys(restoredWordBodies).length > 0) {
+          setWordBodies((prev) => ({ ...prev, ...restoredWordBodies }));
+        }
+        setWfExpandedIds((prev) => {
+          const next = new Set(prev);
+          const path = findNodePath(workflowTrees, targetId);
+          path?.forEach((p) => next.add(p.id));
+          next.add(targetId);
+          return next;
+        });
+        setHighlightedNodeId(importedNodes[0].id);
+        flashStatus(
+          `${importedNodes.length} élément(s) importé(s) sous « ${targetNode?.label || 'destination'} ».`
+        );
+      } catch {
+        flashStatus("Impossible d'importer cette archive ou ce fichier.");
+      }
+    },
+    [workflowTrees, session.userSignature, session.email, flashStatus]
+  );
+
+  const handleImportDirectoryToNode = useCallback(
+    async (targetId: string, files: FileList) => {
+      if (!targetId || files.length === 0) return;
+      if (isNodeLockedOrWithinLockedAncestor(workflowTrees, targetId)) {
+        flashStatus('Import dossier bloqué : la destination est verrouillée par code PIN.');
+        return;
+      }
+      try {
+        const { nodes: importedNodes, restoredWordBodies } = await parseImportedDirectory(
+          files,
+          session.userSignature,
+          session.email
+        );
+        if (importedNodes.length === 0) {
+          flashStatus('Le dossier sélectionné ne contient aucun élément importable.');
+          return;
+        }
+        const targetNode = findNodeById(workflowTrees, targetId);
+        setWorkflowTrees((prev) =>
+          sortExercicesChronologically(insertNodesAtTarget(prev, targetId, importedNodes))
+        );
+        if (Object.keys(restoredWordBodies).length > 0) {
+          setWordBodies((prev) => ({ ...prev, ...restoredWordBodies }));
+        }
+        setWfExpandedIds((prev) => {
+          const next = new Set(prev);
+          const path = findNodePath(workflowTrees, targetId);
+          path?.forEach((p) => next.add(p.id));
+          next.add(targetId);
+          importedNodes.forEach((n) => next.add(n.id));
+          return next;
+        });
+        setHighlightedNodeId(importedNodes[0].id);
+        flashStatus(
+          `Dossier « ${importedNodes[0].label} » importé sous « ${targetNode?.label || 'destination'} ».`
+        );
+      } catch {
+        flashStatus("Impossible d'importer ce dossier.");
+      }
+    },
+    [workflowTrees, session.userSignature, session.email, flashStatus]
   );
 
   const handleDuplicateNodes = useCallback(
@@ -431,6 +616,7 @@ export default function App() {
       setMoveSourceIds((prev) => prev.filter((id) => !targetIds.has(id)));
       setClipboardIds((prev) => prev.filter((id) => !targetIds.has(id)));
       setOpenedWordDoc((prev) => (prev && targetIds.has(prev.id) ? null : prev));
+      setIntegratedDataDoc((prev) => (prev && targetIds.has(prev.node.id) ? null : prev));
       flashStatus('Élément(s) supprimé(s) de la vue.');
     },
     [workflowTrees, wfCheckedIds, flashStatus]
@@ -498,6 +684,9 @@ export default function App() {
         const nextTrees = lockNodesInTree(prev, idSet, pin);
         setOpenedWordDoc((opened) =>
           opened && isNodeLockedOrWithinLockedAncestor(nextTrees, opened.id) ? null : opened
+        );
+        setIntegratedDataDoc((opened) =>
+          opened && isNodeLockedOrWithinLockedAncestor(nextTrees, opened.node.id) ? null : opened
         );
         return nextTrees;
       });
@@ -602,6 +791,55 @@ export default function App() {
       );
     },
     [moveSourceIds, workflowTrees, flashStatus]
+  );
+
+  const handleMoveNodesByDirection = useCallback(
+    (direction: NodeMoveDirection, fallbackNodeId?: string) => {
+      const checkedTop = filterTopLevelSelectedIds(workflowTrees, wfCheckedIds);
+      const sources =
+        checkedTop.length > 0
+          ? checkedTop
+          : fallbackNodeId &&
+            fallbackNodeId !== 'root-workflow' &&
+            fallbackNodeId !== 'root-team-workflow'
+          ? [fallbackNodeId]
+          : [];
+      if (sources.length === 0) return;
+
+      const res = moveNodesByDirection(workflowTrees, sources, direction);
+      if (res.error) {
+        flashStatus(res.error);
+        return;
+      }
+      if (res.movedCount === 0) return;
+
+      setWorkflowTrees(res.trees);
+      setWfExpandedIds((prev) => {
+        const next = new Set(prev);
+        res.expandedParentIds.forEach((eid) => {
+          const path = findNodePath(res.trees, eid);
+          path?.forEach((p) => next.add(p.id));
+          next.add(eid);
+        });
+        res.movedIds.forEach((mid) => {
+          const path = findNodePath(res.trees, mid);
+          path?.slice(0, -1).forEach((p) => next.add(p.id));
+        });
+        return next;
+      });
+      if (res.movedIds[0]) {
+        setHighlightedNodeId(res.movedIds[0]);
+      }
+
+      const directionLabels: Record<NodeMoveDirection, string> = {
+        up: 'Mouvement haut',
+        down: 'Mouvement bas',
+        left: 'Mouvement gauche',
+        right: 'Mouvement droit',
+      };
+      flashStatus(`${directionLabels[direction]} effectué (${res.movedCount} élément(s)).`);
+    },
+    [workflowTrees, wfCheckedIds, flashStatus]
   );
 
   const handleCopyPasteAction = useCallback(
@@ -1041,6 +1279,7 @@ export default function App() {
         moveSourceIds={moveSourceIds}
         onStartMoveNodes={handleStartMoveNodes}
         onMoveToTarget={handleMoveToTarget}
+        onMoveNodesByDirection={handleMoveNodesByDirection}
         onClearMoveSource={() => setMoveSourceIds([])}
         clipboardIds={clipboardIds}
         onCopyPasteAction={handleCopyPasteAction}
@@ -1050,10 +1289,21 @@ export default function App() {
         onUnlockNode={handleUnlockNode}
         onToggleManagerReview={handleToggleManagerReview}
         openedWordDoc={openedWordDoc}
+        wordBodies={wordBodies}
+        onUpdateWordBody={(docId, content) =>
+          setWordBodies((prev) => ({ ...prev, [docId]: content }))
+        }
         onOpenWordDoc={handleOpenWordDoc}
         onCloseWordDoc={() => setOpenedWordDoc(null)}
+        integratedDataDoc={integratedDataDoc}
+        onIntegrateData={handleIntegrateData}
+        onRegenerateIntegratedData={handleRegenerateIntegratedData}
+        onCloseIntegratedData={() => setIntegratedDataDoc(null)}
         onOpenDocumentInChat={handleOpenDocumentInChat}
         onDownloadNodes={handleDownloadNodes}
+        onExportArchive={handleExportArchive}
+        onImportFilesToNode={handleImportFilesToNode}
+        onImportDirectoryToNode={handleImportDirectoryToNode}
         onDuplicateNodes={handleDuplicateNodes}
         onDeleteNodes={handleDeleteNodes}
         onRenameNode={handleRenameNode}
