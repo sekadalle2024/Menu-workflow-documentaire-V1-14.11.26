@@ -1,0 +1,8 @@
+{
+  "name": "AuditDossier — Menu Accordéon & TreeView",
+  "description": "Modélisation front-end interactive et script déployable du menu accordéon TreeView pour la classification automatique des livrables d'audit interne.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

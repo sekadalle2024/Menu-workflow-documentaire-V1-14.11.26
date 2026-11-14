@@ -1,0 +1,760 @@
+- Workflow de [Menu coulissant]
+    - Workflow documentaire dossier permanent -audit
+        - [Exemple json]
+            - 
+            
+            | N° | Activités (catégorie) | Document |
+            | --- | --- | --- |
+            | 1 | Identification de la cible | Fiche signalétique de l’entité, de la direction ou du processus audité |
+            | 2 | Identification de la cible | Fiche de positionnement dans l’univers d’audit et dans la cartographie des risques (9.1, 9.4) |
+            | 3 | Identification de la cible | Organigramme hiérarchique et fonctionnel de la cible |
+            | 4 | Identification de la cible | Fiches de poste des acteurs clés |
+            | 5 | Identification de la cible | Annuaire des responsables et interlocuteurs permanents |
+            | 6 | Identification de la cible | Liste des sites, agences, caisses et implantations rattachés |
+            | 7 | Identification de la cible | Historique des réorganisations et des changements majeurs |
+            | 8 | Identification de la cible | Note de présentation de la mission récurrente (finalité, périmètre, fréquence) |
+            | 9 | Cadre légal et réglementaire | Recueil des textes légaux et réglementaires applicables (OHADA, UMOA, CIMA, sectoriels) |
+            | 10 | Cadre légal et réglementaire | Instructions de la BCEAO, de la Commission Bancaire ou de la CRCA applicables à la cible |
+            | 11 | Cadre légal et réglementaire | Politiques internes et notes de service en vigueur |
+            | 12 | Cadre légal et réglementaire | Dispositions fiscales et sociales applicables |
+            | 13 | Cadre légal et réglementaire | Dispositif de lutte contre le blanchiment et le financement du terrorisme applicable |
+            | 14 | Cadre légal et réglementaire | Registre de veille réglementaire propre à la cible |
+            | 15 | Cadre légal et réglementaire | Tableau de conformité aux textes (exigence, source, responsable, statut) |
+            | 16 | Cadre légal et réglementaire | Historique des modifications des textes et des procédures |
+            | 17 | Description du processus | Cartographie du macro-processus et nomenclature des sous-processus |
+            | 18 | Description du processus | Logigrammes (flowcharts) des sous-processus |
+            | 19 | Description du processus | Narratifs ou descriptifs détaillés des processus |
+            | 20 | Description du processus | Tableau des acteurs, rôles et responsabilités (RACI) |
+            | 21 | Description du processus | Liste des tâches clés par sous-processus |
+            | 22 | Description du processus | Liste des documents du processus et des pièces justificatives |
+            | 23 | Description du processus | Modèles de formulaires et de documents types utilisés |
+            | 24 | Description du processus | Liste des données d’entrée et de sortie du processus |
+            | 25 | Description du processus | Liste des informations et des données clés |
+            | 26 | Description du processus | Tableau des flux physiques, comptables et financiers |
+            | 27 | Description du processus | Schémas comptables associés (SYSCOHADA, plan comptable bancaire ou CIMA) |
+            | 28 | Description du processus | Manuel de procédures de la cible |
+            | 29 | Description du processus | Tableau d’interfaces avec les autres processus et directions |
+            | 30 | Description du processus | Glossaire et lexique métier de la cible |
+            | 31 | Contrôle interne | Référentiel de contrôle interne du processus |
+            | 32 | Contrôle interne | Liste des contrôles clés (préventifs, détectifs, correctifs) |
+            | 33 | Contrôle interne | Liste des contrôles d’audit associés |
+            | 34 | Contrôle interne | Matrice des tâches, risques et contrôles |
+            | 35 | Contrôle interne | Matrice de séparation des tâches et des fonctions incompatibles |
+            | 36 | Contrôle interne | Tableau des délégations de pouvoirs et des limites d’autorisation |
+            | 37 | Contrôle interne | Liste des plafonds, seuils et autorisations (caisse, décaissements, signatures) |
+            | 38 | Contrôle interne | Dispositif de contrôle permanent de premier et de deuxième niveau |
+            | 39 | Contrôle interne | Rapports de contrôle permanent et plans de contrôle |
+            | 40 | Contrôle interne | Questionnaire de contrôle interne (QCI) validé et ses mises à jour |
+            | 41 | Risques | Extrait de la cartographie des risques de la cible |
+            | 42 | Risques | Fiches de risques par sous-processus |
+            | 43 | Risques | Échelles de cotation applicables (impact, probabilité, maîtrise) |
+            | 44 | Risques | Liste des zones à risques et de leur historique de cotation |
+            | 45 | Risques | Matrice des risques bruts et résiduels |
+            | 46 | Risques | Registre des risques de fraude et signaux d’alerte propres à la cible |
+            | 47 | Risques | Registre des incidents, anomalies et pertes opérationnelles |
+            | 48 | Risques | Indicateurs clés de risque (KRI) et seuils d’alerte |
+            | 49 | Risques | Registre des risques acceptés par la direction (11.5) |
+            | 50 | Risques | Historique des évolutions de la cotation des risques par mission |
+            | 51 | Systèmes d’information | Cartographie des applications utilisées par la cible |
+            | 52 | Systèmes d’information | Matrice des droits d’accès et des profils utilisateurs |
+            | 53 | Systèmes d’information | Documentation fonctionnelle et paramétrage des applications clés |
+            | 54 | Systèmes d’information | Dictionnaire des données et structure des fichiers clés |
+            | 55 | Systèmes d’information | Liste des interfaces et des flux automatiques |
+            | 56 | Systèmes d’information | Plan de continuité et de reprise d’activité de la cible |
+            | 57 | Systèmes d’information | Procédures de sauvegarde et de gestion des habilitations |
+            | 58 | Systèmes d’information | Requêtes et extractions standard réutilisables |
+            | 59 | Historique des missions | Registre des missions antérieures sur la cible |
+            | 60 | Historique des missions | Rapports d’audit antérieurs (derniers exercices) |
+            | 61 | Historique des missions | Lettres de mission et périmètres antérieurs |
+            | 62 | Historique des missions | FRAP et fiches de constat antérieures |
+            | 63 | Historique des missions | Programmes de travail des missions antérieures |
+            | 64 | Historique des missions | Synthèse des constats récurrents et tendances |
+            | 65 | Historique des missions | Base consolidée des recommandations émises |
+            | 66 | Historique des missions | Plans d’action validés par l’audité |
+            | 67 | Historique des missions | Tableau de suivi des recommandations et état d’avancement (15.2) |
+            | 68 | Historique des missions | Historique des écarts entre le plan d’action et la réalité |
+            | 69 | Historique des missions | Retours d’expérience et leçons des missions précédentes |
+            | 70 | Contrôles externes | Rapports d’inspection du régulateur et réponses de l’entité |
+            | 71 | Contrôles externes | Lettres de recommandations du commissaire aux comptes |
+            | 72 | Contrôles externes | Rapports de l’inspection générale ou du contrôle de la maison mère |
+            | 73 | Contrôles externes | Rapports d’experts, de consultants et de certifications (ISO, qualité) |
+            | 74 | Contrôles externes | Suivi des recommandations externes ouvertes |
+            | 75 | Contrôles externes | Tableau de coordination avec les autres fonctions d’assurance (9.5) |
+            | 76 | Données et indicateurs | Tableau pluriannuel des volumes d’activité et des montants |
+            | 77 | Données et indicateurs | Balances et soldes de référence des comptes de la cible |
+            | 78 | Données et indicateurs | Budgets, effectifs et coûts de la cible |
+            | 79 | Données et indicateurs | Tableau de bord des indicateurs de performance du processus |
+            | 80 | Données et indicateurs | Statistiques des anomalies, rejets et écarts (écarts de caisse, litiges) |
+            | 81 | Données et indicateurs | Données de benchmark et comparaison entre sites |
+            | 82 | Données et indicateurs | Plan comptable et comptes mouvementés par la cible |
+            | 83 | Outils réutilisables de mission | Liste des objets auditables de la cible |
+            | 84 | Outils réutilisables de mission | Liste des points d’audit récurrents |
+            | 85 | Outils réutilisables de mission | Matrice des domaines, objectifs généraux et objectifs spécifiques types |
+            | 86 | Outils réutilisables de mission | Catalogue des assertions d’audit applicables |
+            | 87 | Outils réutilisables de mission | Questionnaire de prise de connaissance (QPC) type |
+            | 88 | Outils réutilisables de mission | Programme de travail type et ses mises à jour |
+            | 89 | Outils réutilisables de mission | Catalogue des tests et techniques d’audit adaptés à la cible |
+            | 90 | Outils réutilisables de mission | Plan de sondage et paramètres d’échantillonnage de référence |
+            | 91 | Outils réutilisables de mission | Modèles de feuilles de travail, de PV de comptage et de FRAP propres à la cible |
+            | 92 | Relations et communication | Liste des interlocuteurs de l’audité à contacter par étape de mission |
+            | 93 | Relations et communication | Comptes rendus des réunions d’ouverture et de clôture antérieures |
+            | 94 | Relations et communication | Correspondances importantes avec l’audité et la direction |
+            | 95 | Relations et communication | Questionnaires de satisfaction de l’audité et suites données |
+            | 96 | Gestion du dossier | Sommaire et index du dossier permanent de la cible |
+            | 97 | Gestion du dossier | Fiche de mise à jour après chaque mission (ce qui a changé, date, auteur) |
+            | 98 | Gestion du dossier | Règles d’accès, de confidentialité et de conservation (5.1, 5.2) |
+            | 99 | Gestion du dossier | Journal des versions et historique des modifications du dossier |
+            | 100 | Gestion du dossier | Checklist de revue annuelle et de validation du dossier par le responsable de l’audit |
+            - Document service audit
+                
+                
+                | N° | Activités (catégorie) | Document |
+                | --- | --- | --- |
+                | 1 | Mandat et cadre statutaire | Charte d’audit interne approuvée par le conseil (6.2) |
+                | 2 | Mandat et cadre statutaire | Mandat d’audit interne et décision de création du service (6.1) |
+                | 3 | Mandat et cadre statutaire | Procès-verbaux d’approbation et de révision périodique de la charte |
+                | 4 | Mandat et cadre statutaire | Note de soutien du conseil et de la direction générale (6.3) |
+                | 5 | Mandat et cadre statutaire | Déclaration d’indépendance organisationnelle et rattachement hiérarchique (7.1) |
+                | 6 | Mandat et cadre statutaire | Lettre de nomination et profil du responsable de l’audit interne (7.2) |
+                | 7 | Mandat et cadre statutaire | Droits d’accès aux documents, personnes, locaux et systèmes |
+                | 8 | Mandat et cadre statutaire | Textes légaux et réglementaires encadrant la fonction (UMOA, CIMA, OHADA, sectoriels) |
+                | 9 | Gouvernance et relations avec le conseil | Charte du comité d’audit et règlement intérieur |
+                | 10 | Gouvernance et relations avec le conseil | Calendrier annuel des réunions du comité d’audit |
+                | 11 | Gouvernance et relations avec le conseil | Procès-verbaux du comité d’audit relatifs à l’audit interne (8.1) |
+                | 12 | Gouvernance et relations avec le conseil | Rapports périodiques d’activité à la gouvernance |
+                | 13 | Gouvernance et relations avec le conseil | Rapport annuel d’activité de l’audit interne |
+                | 14 | Gouvernance et relations avec le conseil | Organigramme de l’organisation et schéma de gouvernance (9.1) |
+                | 15 | Gouvernance et relations avec le conseil | Tableau des délégations de pouvoirs et des limites d’autorisation |
+                | 16 | Gouvernance et relations avec le conseil | Politique de gestion des risques et appétit au risque |
+                | 17 | Gouvernance et relations avec le conseil | Politique d’acceptation des risques et traitement des risques non traités (11.5) |
+                | 18 | Éthique et déontologie | Code de déontologie de l’auditeur interne (1.1, 1.2, 1.3) |
+                | 19 | Éthique et déontologie | Code d’éthique et de conduite de l’organisation |
+                | 20 | Éthique et déontologie | Déclarations annuelles d’indépendance et d’objectivité des auditeurs (2.1) |
+                | 21 | Éthique et déontologie | Registre des conflits d’intérêts et mesures de sauvegarde (2.2, 2.3) |
+                | 22 | Éthique et déontologie | Engagements de confidentialité des auditeurs (5.2) |
+                | 23 | Éthique et déontologie | Politique de classification et de protection de l’information (5.1, 5.2) |
+                | 24 | Éthique et déontologie | Dispositif d’alerte professionnelle et procédure de traitement des signalements |
+                | 25 | Stratégie et planification | Stratégie de l’audit interne alignée sur celle de l’organisation (9.2) |
+                | 26 | Stratégie et planification | Plan stratégique pluriannuel du service |
+                | 27 | Stratégie et planification | Univers d’audit (9.4) |
+                | 28 | Stratégie et planification | Cartographie des risques de l’organisation (9.1) |
+                | 29 | Stratégie et planification | Méthodologie de construction du plan d’audit basé sur les risques |
+                | 30 | Stratégie et planification | Plans d’audit pluriannuels et annuels approuvés |
+                | 31 | Stratégie et planification | Avenants et modifications du plan et leur validation |
+                | 32 | Stratégie et planification | Cartographie des assurances et plan de coordination avec les autres fonctions (9.5) |
+                | 33 | Stratégie et planification | Tableaux de suivi de réalisation du plan |
+                | 34 | Organisation et ressources du service | Organigramme du service d’audit interne |
+                | 35 | Organisation et ressources du service | Fiches de poste et profils par grade |
+                | 36 | Organisation et ressources du service | Cartographie des compétences et matrice de polyvalence (3.1) |
+                | 37 | Organisation et ressources du service | Plan de formation et suivi de la formation continue (3.2) |
+                | 38 | Organisation et ressources du service | Dossiers des certifications et diplômes des auditeurs |
+                | 39 | Organisation et ressources du service | Budget annuel du service et suivi budgétaire (10.1) |
+                | 40 | Organisation et ressources du service | Plan de charge et gestion prévisionnelle des effectifs (10.2, 8.2) |
+                | 41 | Organisation et ressources du service | Procédure de recrutement et d’intégration des auditeurs |
+                | 42 | Organisation et ressources du service | Procédure d’évaluation de la performance des auditeurs |
+                | 43 | Organisation et ressources du service | Contrats de prestataires, co-sourcing et experts externes |
+                | 44 | Organisation et ressources du service | Inventaire des outils et logiciels d’audit (10.3) |
+                | 45 | Méthodologie et procédures | Manuel d’audit interne du service (9.3) |
+                | 46 | Méthodologie et procédures | Procédure de conduite des missions (préparation, réalisation, conclusion) |
+                | 47 | Méthodologie et procédures | Procédure d’évaluation des risques de la mission (13.2) |
+                | 48 | Méthodologie et procédures | Procédure de rédaction du programme de travail (13.6) |
+                | 49 | Méthodologie et procédures | Guide d’échantillonnage et de sondage |
+                | 50 | Méthodologie et procédures | Guide des techniques et outils d’audit (observation, entretien, analyse de données) |
+                | 51 | Méthodologie et procédures | Guide de collecte et de documentation des preuves (14.1, 14.6) |
+                | 52 | Méthodologie et procédures | Procédure de traitement des constats, FRAP et analyse des causes (14.2, 14.3) |
+                | 53 | Méthodologie et procédures | Échelles de cotation des risques, des constats et des recommandations |
+                | 54 | Méthodologie et procédures | Procédure de rédaction et de diffusion du rapport (11.2, 11.3, 15.1) |
+                | 55 | Méthodologie et procédures | Procédure de traitement des erreurs et omissions (11.4) |
+                | 56 | Méthodologie et procédures | Procédure de supervision et de revue des dossiers (12.3) |
+                | 57 | Méthodologie et procédures | Procédure de traitement des fraudes et des missions d’investigation |
+                | 58 | Méthodologie et procédures | Procédure des missions de conseil et des missions non planifiées |
+                | 59 | Méthodologie et procédures | Procédure d’archivage et de conservation des dossiers |
+                | 60 | Méthodologie et procédures | Procédure de gestion des conflits et des désaccords avec l’audité |
+                | 61 | Modèles de documents | Modèle de lettre de mission et d’avis d’audit |
+                | 62 | Modèles de documents | Modèle de questionnaire de prise de connaissance et de questionnaire de contrôle interne |
+                | 63 | Modèles de documents | Modèle de programme de travail |
+                | 64 | Modèles de documents | Modèle de feuille de travail et légende des signes de pointage |
+                | 65 | Modèles de documents | Modèle de FRAP |
+                | 66 | Modèles de documents | Modèle de rapport d’audit et de synthèse pour le comité |
+                | 67 | Modèles de documents | Modèle de plan d’action et de tableau de suivi des recommandations |
+                | 68 | Modèles de documents | Modèle de compte rendu de réunion d’ouverture et de clôture |
+                | 69 | Modèles de documents | Modèle de questionnaire de satisfaction de l’audité |
+                | 70 | Modèles de documents | Charte graphique et conventions de rédaction |
+                | 71 | Connaissance de l’organisation | Présentation de l’organisation, de son activité et de sa stratégie |
+                | 72 | Connaissance de l’organisation | Cartographie des processus et nomenclature des macro-processus |
+                | 73 | Connaissance de l’organisation | Référentiel de contrôle interne par processus |
+                | 74 | Connaissance de l’organisation | Manuel de procédures administratives, comptables et financières |
+                | 75 | Connaissance de l’organisation | Cartographie applicative et architecture du système d’information |
+                | 76 | Connaissance de l’organisation | Politique de sécurité du SI, plan de continuité et plan de reprise |
+                | 77 | Connaissance de l’organisation | Annuaire des interlocuteurs clés par direction et par processus |
+                | 78 | Connaissance de l’organisation | Liste des entités, filiales et implantations |
+                | 79 | Connaissance de l’organisation | Registre des incidents et des pertes opérationnelles |
+                | 80 | Connaissance de l’organisation | Rapports de l’inspection du régulateur, du CAC et des autres organes de contrôle |
+                | 81 | Suivi des recommandations | Base consolidée des recommandations et état d’avancement |
+                | 82 | Suivi des recommandations | Tableau de bord des recommandations en retard ou non mises en œuvre |
+                | 83 | Suivi des recommandations | Procédure de relance et d’escalade (15.2) |
+                | 84 | Suivi des recommandations | Historique des rapports d’audit par processus |
+                | 85 | Suivi des recommandations | Synthèse des constats récurrents et tendances |
+                | 86 | Suivi des recommandations | Registre des risques acceptés par la direction (11.5) |
+                | 87 | Assurance qualité | Programme d’assurance et d’amélioration de la qualité (8.3) |
+                | 88 | Assurance qualité | Rapports d’évaluation interne de la qualité (12.1) |
+                | 89 | Assurance qualité | Rapport d’évaluation externe de la qualité et plan d’action (8.4) |
+                | 90 | Assurance qualité | Déclaration de conformité aux normes internationales (4.1) |
+                | 91 | Assurance qualité | Indicateurs de performance du service et tableau de bord (12.2) |
+                | 92 | Assurance qualité | Résultats des enquêtes de satisfaction des parties prenantes |
+                | 93 | Assurance qualité | Plan d’amélioration continue du service |
+                | 94 | Assurance qualité | Cartographie de conformité aux normes CRIPP |
+                | 95 | Veille et référentiels | Texte intégral des normes CRIPP et des guides de mise en œuvre |
+                | 96 | Veille et référentiels | Référentiels de risques et de contrôle interne (COSO, COBIT, ISO 31000) |
+                | 97 | Veille et référentiels | Registre de veille réglementaire et professionnelle |
+                | 98 | Veille et référentiels | Recueil des bonnes pratiques et retours d’expérience (REX) |
+                | 99 | Gestion du dossier | Annuaire des dossiers de mission et registre des archives |
+                | 100 | Gestion du dossier | Index du dossier permanent et procédure de mise à jour annuelle |
+    - Workflow documentaire dossier exercice-audit
+        - [Exemple json]
+            
+            
+            - 
+            
+            | N° | Activités (phase / étape) | Document |
+            | --- | --- | --- |
+            | 1 | Gestion du dossier | Page de garde et fiche d’identification de la mission |
+            | 2 | Gestion du dossier | Sommaire et index de référencement des feuilles de travail |
+            | 3 | Gestion du dossier | Légende des signes de pointage (tickmarks) et conventions de référencement |
+            | 4 | Gestion du dossier | Fiche de supervision et de revue des feuilles de travail (12.3) |
+            | 5 | Gestion du dossier | Tableau de suivi d’avancement et journal des points ouverts |
+            | 6 | Gestion du dossier | Feuilles de temps et suivi du budget en jours-hommes |
+            | 7 | Gestion du dossier | Registre des demandes de documents et d’informations |
+            | 8 | Gestion du dossier | Checklist de conformité méthodologique du dossier |
+            | 9 | Préparation / Cadrage | Fiche de mission extraite du plan d’audit annuel (9.4) |
+            | 10 | Préparation / Cadrage | Ordre de mission signé par le responsable de l’audit interne |
+            | 11 | Préparation / Cadrage | Désignation de l’équipe (chef de mission, auditeurs, experts) |
+            | 12 | Préparation / Cadrage | Déclarations d’objectivité et d’absence de conflit d’intérêts (2.1, 2.2, 2.3) |
+            | 13 | Préparation / Cadrage | Fiche d’évaluation des compétences requises et des besoins d’experts (3.1, 13.5) |
+            | 14 | Préparation / Cadrage | Budget et planning prévisionnel de la mission |
+            | 15 | Préparation / Cadrage | Lettre de mission ou notification adressée à l’audité (13.1) |
+            | 16 | Préparation / Cadrage | Avis d’audit et liste des documents à préparer par l’audité |
+            | 17 | Préparation / Cadrage | Liste des interlocuteurs et des personnes à auditer |
+            | 18 | Préparation / Cadrage | Rappel du mandat et de la charte d’audit interne (6.1, 6.2) |
+            | 19 | Préparation / Cadrage | Plan de communication de la mission (11.1) |
+            | 20 | Préparation / Cadrage | Note sur la confidentialité et la protection de l’information (5.1, 5.2) |
+            | 21 | Préparation / Prise de connaissance | Dossier de prise de connaissance du processus audité |
+            | 22 | Préparation / Prise de connaissance | Organigramme et fiches de poste des acteurs |
+            | 23 | Préparation / Prise de connaissance | Manuel de procédures, notes de service et instructions |
+            | 24 | Préparation / Prise de connaissance | Cartographie du processus (macro-processus, logigramme) |
+            | 25 | Préparation / Prise de connaissance | Narratif ou descriptif du processus |
+            | 26 | Préparation / Prise de connaissance | Tableau acteurs, tâches, documents et systèmes d’information |
+            | 27 | Préparation / Prise de connaissance | Comptes rendus des entretiens de prise de connaissance |
+            | 28 | Préparation / Prise de connaissance | Questionnaire de prise de connaissance (QPC) |
+            | 29 | Préparation / Prise de connaissance | Questionnaire de contrôle interne (QCI) |
+            | 30 | Préparation / Prise de connaissance | Tests de cheminement (walkthrough) |
+            | 31 | Préparation / Prise de connaissance | Référentiel de contrôle interne du processus |
+            | 32 | Préparation / Prise de connaissance | Textes légaux, réglementaires et politiques internes applicables |
+            | 33 | Préparation / Prise de connaissance | Rapports d’audit antérieurs et suivi des recommandations |
+            | 34 | Préparation / Prise de connaissance | Rapports du contrôle permanent, du régulateur, du CAC et registre des incidents |
+            | 35 | Préparation / Prise de connaissance | Données chiffrées de cadrage (volumes, balances, statistiques) |
+            | 36 | Préparation / Prise de connaissance | Cartographie applicative et droits d’accès aux systèmes d’information |
+            | 37 | Préparation / Évaluation des risques | Note méthodologique et échelles de cotation (impact, probabilité, maîtrise) |
+            | 38 | Préparation / Évaluation des risques | Extrait de la cartographie des risques du processus |
+            | 39 | Préparation / Évaluation des risques | Liste des risques identifiés pour la mission (13.2) |
+            | 40 | Préparation / Évaluation des risques | Cotation des risques bruts |
+            | 41 | Préparation / Évaluation des risques | Évaluation du dispositif de maîtrise et des risques résiduels |
+            | 42 | Préparation / Évaluation des risques | Matrice risques, objectifs et contrôles |
+            | 43 | Préparation / Évaluation des risques | Évaluation du risque de fraude du processus |
+            | 44 | Préparation / Évaluation des risques | Revue analytique préliminaire et analyse de données |
+            | 45 | Préparation / Évaluation des risques | Hiérarchisation des zones à risques et choix des points d’audit |
+            | 46 | Préparation / Évaluation des risques | Note de validation de l’évaluation des risques par le responsable de l’audit |
+            | 47 | Préparation / Objectifs et programme | Objectifs généraux de la mission (13.3) |
+            | 48 | Préparation / Objectifs et programme | Objectifs spécifiques et questions d’audit |
+            | 49 | Préparation / Objectifs et programme | Périmètre, exclusions et limitations (13.3) |
+            | 50 | Préparation / Objectifs et programme | Critères d’évaluation retenus (13.4) |
+            | 51 | Préparation / Objectifs et programme | Liste des objets auditables et des points d’audit |
+            | 52 | Préparation / Objectifs et programme | Matrice des domaines et des assertions d’audit |
+            | 53 | Préparation / Objectifs et programme | Programme de travail (13.6) |
+            | 54 | Préparation / Objectifs et programme | Techniques d’audit retenues par point d’audit |
+            | 55 | Préparation / Objectifs et programme | Méthode d’échantillonnage et plan de sondage |
+            | 56 | Préparation / Objectifs et programme | Fiche de validation du programme de travail par le responsable de l’audit |
+            | 57 | Préparation / Réunion d’ouverture | Convocation à la réunion d’ouverture |
+            | 58 | Préparation / Réunion d’ouverture | Feuille de présence |
+            | 59 | Préparation / Réunion d’ouverture | Support de présentation de la mission |
+            | 60 | Préparation / Réunion d’ouverture | Compte rendu de la réunion d’ouverture |
+            | 61 | Préparation / Réunion d’ouverture | Calendrier d’intervention validé avec l’audité |
+            | 62 | Préparation / Réunion d’ouverture | Note d’information aux directions et services concernés |
+            | 63 | Réalisation / Travaux | Feuilles de travail par point d’audit |
+            | 64 | Réalisation / Travaux | Feuilles de tests de conformité (procédures) |
+            | 65 | Réalisation / Travaux | Feuilles de tests de substance (données et soldes) |
+            | 66 | Réalisation / Travaux | Feuilles de sondage et résultats des échantillons |
+            | 67 | Réalisation / Travaux | Comptes rendus des entretiens de réalisation |
+            | 68 | Réalisation / Travaux | PV d’observation physique et de visite de sites |
+            | 69 | Réalisation / Travaux | PV de comptage ou d’inventaire inopiné (caisse, stocks, immobilisations) |
+            | 70 | Réalisation / Travaux | Rapprochements et recalculs |
+            | 71 | Réalisation / Travaux | Extractions de données et scripts d’analyse |
+            | 72 | Réalisation / Travaux | Tests par analyse de données (doublons, ruptures de séquence, anomalies) |
+            | 73 | Réalisation / Travaux | Confirmations externes (circularisation) |
+            | 74 | Réalisation / Travaux | Copies de pièces probantes et captures d’écran |
+            | 75 | Réalisation / Travaux | Fiche d’évaluation de la fiabilité et de la suffisance des preuves (14.1) |
+            | 76 | Réalisation / Travaux | Revue des droits d’accès et de la séparation des tâches |
+            | 77 | Réalisation / Travaux | Tests des indicateurs de fraude et des signaux d’alerte |
+            | 78 | Réalisation / Travaux | Documentation des écarts et anomalies relevés |
+            | 79 | Réalisation / Travaux | Fiche d’évaluation du contrôle interne par point d’audit |
+            | 80 | Réalisation / Travaux | Notes de revue du superviseur et réponses de l’auditeur |
+            | 81 | Réalisation / Travaux | Synthèse par objectif spécifique |
+            | 82 | Réalisation / Travaux | Comptes rendus des points d’étape avec l’audité |
+            | 83 | Réalisation / Travaux | Tableau de bord d’avancement de la mission |
+            | 84 | Réalisation / Travaux | Journal des difficultés rencontrées et limitations d’étendue |
+            | 85 | Réalisation / Constats | Fiche de constat potentiel (14.2) |
+            | 86 | Réalisation / Constats | Feuille de révélation et d’analyse de problème (FRAP) |
+            | 87 | Réalisation / Constats | Analyse des causes (arbre des causes, 5 pourquoi, Ishikawa) |
+            | 88 | Réalisation / Constats | Évaluation de la criticité et de l’impact des constats (14.3) |
+            | 89 | Réalisation / Constats | Validation contradictoire des FRAP par l’audité (signée) |
+            | 90 | Réalisation / Constats | Registre des constats de la mission |
+            | 91 | Réalisation / Constats | Recommandations et projet de plan d’action (14.4) |
+            | 92 | Conclusion / Rapport | Compte rendu de la réunion de clôture |
+            | 93 | Conclusion / Rapport | Projet de rapport d’audit |
+            | 94 | Conclusion / Rapport | Réponses de l’audité et plan d’action proposé |
+            | 95 | Conclusion / Rapport | Rapport final avec synthèse, conclusions et évaluation du dispositif (14.5, 15.1) |
+            | 96 | Conclusion / Rapport | Lettre de transmission et liste de diffusion |
+            | 97 | Conclusion / Rapport | Note de synthèse destinée au comité d’audit |
+            | 98 | Suivi et clôture | Plan d’action validé et tableau de suivi des recommandations (15.2) |
+            | 99 | Suivi et clôture | Questionnaire de satisfaction de l’audité et bilan d’évaluation interne de la qualité (12.1, 12.2) |
+            | 100 | Suivi et clôture | Fiche de clôture et d’archivage du dossier (14.6) |
+    - Workflow documentaire suivi recos
+        - [Exemple json]
+    - [Workflow documentaire dossier permanent-Cac]
+        - [Exemple json]
+            - 
+            
+            | N° | Activités (catégorie) | Document |
+            | --- | --- | --- |
+            | 1 | Identification de la cible | Fiche signalétique de l’entité, de la direction ou du processus audité |
+            | 2 | Identification de la cible | Fiche de positionnement dans l’univers d’audit et dans la cartographie des risques (9.1, 9.4) |
+            | 3 | Identification de la cible | Organigramme hiérarchique et fonctionnel de la cible |
+            | 4 | Identification de la cible | Fiches de poste des acteurs clés |
+            | 5 | Identification de la cible | Annuaire des responsables et interlocuteurs permanents |
+            | 6 | Identification de la cible | Liste des sites, agences, caisses et implantations rattachés |
+            | 7 | Identification de la cible | Historique des réorganisations et des changements majeurs |
+            | 8 | Identification de la cible | Note de présentation de la mission récurrente (finalité, périmètre, fréquence) |
+            | 9 | Cadre légal et réglementaire | Recueil des textes légaux et réglementaires applicables (OHADA, UMOA, CIMA, sectoriels) |
+            | 10 | Cadre légal et réglementaire | Instructions de la BCEAO, de la Commission Bancaire ou de la CRCA applicables à la cible |
+            | 11 | Cadre légal et réglementaire | Politiques internes et notes de service en vigueur |
+            | 12 | Cadre légal et réglementaire | Dispositions fiscales et sociales applicables |
+            | 13 | Cadre légal et réglementaire | Dispositif de lutte contre le blanchiment et le financement du terrorisme applicable |
+            | 14 | Cadre légal et réglementaire | Registre de veille réglementaire propre à la cible |
+            | 15 | Cadre légal et réglementaire | Tableau de conformité aux textes (exigence, source, responsable, statut) |
+            | 16 | Cadre légal et réglementaire | Historique des modifications des textes et des procédures |
+            | 17 | Description du processus | Cartographie du macro-processus et nomenclature des sous-processus |
+            | 18 | Description du processus | Logigrammes (flowcharts) des sous-processus |
+            | 19 | Description du processus | Narratifs ou descriptifs détaillés des processus |
+            | 20 | Description du processus | Tableau des acteurs, rôles et responsabilités (RACI) |
+            | 21 | Description du processus | Liste des tâches clés par sous-processus |
+            | 22 | Description du processus | Liste des documents du processus et des pièces justificatives |
+            | 23 | Description du processus | Modèles de formulaires et de documents types utilisés |
+            | 24 | Description du processus | Liste des données d’entrée et de sortie du processus |
+            | 25 | Description du processus | Liste des informations et des données clés |
+            | 26 | Description du processus | Tableau des flux physiques, comptables et financiers |
+            | 27 | Description du processus | Schémas comptables associés (SYSCOHADA, plan comptable bancaire ou CIMA) |
+            | 28 | Description du processus | Manuel de procédures de la cible |
+            | 29 | Description du processus | Tableau d’interfaces avec les autres processus et directions |
+            | 30 | Description du processus | Glossaire et lexique métier de la cible |
+            | 31 | Contrôle interne | Référentiel de contrôle interne du processus |
+            | 32 | Contrôle interne | Liste des contrôles clés (préventifs, détectifs, correctifs) |
+            | 33 | Contrôle interne | Liste des contrôles d’audit associés |
+            | 34 | Contrôle interne | Matrice des tâches, risques et contrôles |
+            | 35 | Contrôle interne | Matrice de séparation des tâches et des fonctions incompatibles |
+            | 36 | Contrôle interne | Tableau des délégations de pouvoirs et des limites d’autorisation |
+            | 37 | Contrôle interne | Liste des plafonds, seuils et autorisations (caisse, décaissements, signatures) |
+            | 38 | Contrôle interne | Dispositif de contrôle permanent de premier et de deuxième niveau |
+            | 39 | Contrôle interne | Rapports de contrôle permanent et plans de contrôle |
+            | 40 | Contrôle interne | Questionnaire de contrôle interne (QCI) validé et ses mises à jour |
+            | 41 | Risques | Extrait de la cartographie des risques de la cible |
+            | 42 | Risques | Fiches de risques par sous-processus |
+            | 43 | Risques | Échelles de cotation applicables (impact, probabilité, maîtrise) |
+            | 44 | Risques | Liste des zones à risques et de leur historique de cotation |
+            | 45 | Risques | Matrice des risques bruts et résiduels |
+            | 46 | Risques | Registre des risques de fraude et signaux d’alerte propres à la cible |
+            | 47 | Risques | Registre des incidents, anomalies et pertes opérationnelles |
+            | 48 | Risques | Indicateurs clés de risque (KRI) et seuils d’alerte |
+            | 49 | Risques | Registre des risques acceptés par la direction (11.5) |
+            | 50 | Risques | Historique des évolutions de la cotation des risques par mission |
+            | 51 | Systèmes d’information | Cartographie des applications utilisées par la cible |
+            | 52 | Systèmes d’information | Matrice des droits d’accès et des profils utilisateurs |
+            | 53 | Systèmes d’information | Documentation fonctionnelle et paramétrage des applications clés |
+            | 54 | Systèmes d’information | Dictionnaire des données et structure des fichiers clés |
+            | 55 | Systèmes d’information | Liste des interfaces et des flux automatiques |
+            | 56 | Systèmes d’information | Plan de continuité et de reprise d’activité de la cible |
+            | 57 | Systèmes d’information | Procédures de sauvegarde et de gestion des habilitations |
+            | 58 | Systèmes d’information | Requêtes et extractions standard réutilisables |
+            | 59 | Historique des missions | Registre des missions antérieures sur la cible |
+            | 60 | Historique des missions | Rapports d’audit antérieurs (derniers exercices) |
+            | 61 | Historique des missions | Lettres de mission et périmètres antérieurs |
+            | 62 | Historique des missions | FRAP et fiches de constat antérieures |
+            | 63 | Historique des missions | Programmes de travail des missions antérieures |
+            | 64 | Historique des missions | Synthèse des constats récurrents et tendances |
+            | 65 | Historique des missions | Base consolidée des recommandations émises |
+            | 66 | Historique des missions | Plans d’action validés par l’audité |
+            | 67 | Historique des missions | Tableau de suivi des recommandations et état d’avancement (15.2) |
+            | 68 | Historique des missions | Historique des écarts entre le plan d’action et la réalité |
+            | 69 | Historique des missions | Retours d’expérience et leçons des missions précédentes |
+            | 70 | Contrôles externes | Rapports d’inspection du régulateur et réponses de l’entité |
+            | 71 | Contrôles externes | Lettres de recommandations du commissaire aux comptes |
+            | 72 | Contrôles externes | Rapports de l’inspection générale ou du contrôle de la maison mère |
+            | 73 | Contrôles externes | Rapports d’experts, de consultants et de certifications (ISO, qualité) |
+            | 74 | Contrôles externes | Suivi des recommandations externes ouvertes |
+            | 75 | Contrôles externes | Tableau de coordination avec les autres fonctions d’assurance (9.5) |
+            | 76 | Données et indicateurs | Tableau pluriannuel des volumes d’activité et des montants |
+            | 77 | Données et indicateurs | Balances et soldes de référence des comptes de la cible |
+            | 78 | Données et indicateurs | Budgets, effectifs et coûts de la cible |
+            | 79 | Données et indicateurs | Tableau de bord des indicateurs de performance du processus |
+            | 80 | Données et indicateurs | Statistiques des anomalies, rejets et écarts (écarts de caisse, litiges) |
+            | 81 | Données et indicateurs | Données de benchmark et comparaison entre sites |
+            | 82 | Données et indicateurs | Plan comptable et comptes mouvementés par la cible |
+            | 83 | Outils réutilisables de mission | Liste des objets auditables de la cible |
+            | 84 | Outils réutilisables de mission | Liste des points d’audit récurrents |
+            | 85 | Outils réutilisables de mission | Matrice des domaines, objectifs généraux et objectifs spécifiques types |
+            | 86 | Outils réutilisables de mission | Catalogue des assertions d’audit applicables |
+            | 87 | Outils réutilisables de mission | Questionnaire de prise de connaissance (QPC) type |
+            | 88 | Outils réutilisables de mission | Programme de travail type et ses mises à jour |
+            | 89 | Outils réutilisables de mission | Catalogue des tests et techniques d’audit adaptés à la cible |
+            | 90 | Outils réutilisables de mission | Plan de sondage et paramètres d’échantillonnage de référence |
+            | 91 | Outils réutilisables de mission | Modèles de feuilles de travail, de PV de comptage et de FRAP propres à la cible |
+            | 92 | Relations et communication | Liste des interlocuteurs de l’audité à contacter par étape de mission |
+            | 93 | Relations et communication | Comptes rendus des réunions d’ouverture et de clôture antérieures |
+            | 94 | Relations et communication | Correspondances importantes avec l’audité et la direction |
+            | 95 | Relations et communication | Questionnaires de satisfaction de l’audité et suites données |
+            | 96 | Gestion du dossier | Sommaire et index du dossier permanent de la cible |
+            | 97 | Gestion du dossier | Fiche de mise à jour après chaque mission (ce qui a changé, date, auteur) |
+            | 98 | Gestion du dossier | Règles d’accès, de confidentialité et de conservation (5.1, 5.2) |
+            | 99 | Gestion du dossier | Journal des versions et historique des modifications du dossier |
+            | 100 | Gestion du dossier | Checklist de revue annuelle et de validation du dossier par le responsable de l’audit |
+    - Workflow documentaire dossier exercice-Cac]
+        - [Exemple json]
+    - [Workflow documentaire manuel procédure-Cac
+        - [Exemple json]
+    - [Workflow documentaire manuel audit
+        - [Exemple json]
+            - 
+                
+                
+                | No | Chapitre | Sections | Titres (niveau 3) | Rubriques audit clés | Document / Étape lié | Normes CRIPP | Command user |
+                | --- | --- | --- | --- | --- | --- | --- | --- |
+                | 1 | 0. Cadre général du manuel | 0.1 Objet et champ ; 0.2 Cadre réglementaire bancaire ; 0.3 Gouvernance du manuel | Public cible ; Textes BCEAO/CB-UMOA ; Références CRIPP ; Versions et diffusion | Domaines, Normes, Document | Manuel audit interne | 4.1, 9.3 | `/Structure [Axe]=Cadre ; [Ch]=0` |
+                | 2 | 1. Mise en place du service d’audit | 1.1 Environnement de contrôle ; 1.2 Organisation ; 1.3 Ressources ; 1.4 Budget | Dispositif de contrôle de la banque ; Organigramme et rattachement ; Recrutement et formation ; Prévisions budgétaires à 3 ans | Univers audit, Personne, Plan d’action | Plan de mise en place | 7.1, 8.2, 10.1, 10.2 | `/Structure [Axe]=Mise en place ; [Ch]=1` |
+                | 3 | 2. Charte d’audit interne | 2.1 Mandat ; 2.2 Indépendance ; 2.3 Droits d’accès ; 2.4 Code de déontologie | Missions d’assurance et de conseil ; Rattachement au comité d’audit ; Accès aux sites, données et Core Banking ; Conflits d’intérêts | Normes, Objectifs généraux | Charte d’audit | 1.1 à 1.3, 2.1 à 2.3, 6.1 à 6.3 | `/Structure [Axe]=Charte ; [Ch]=2` |
+                | 4 | 3. Cartographie des risques | 3.1 Méthodologie ; 3.2 Identification ; 3.3 Cotation ; 3.4 Mise à jour | Univers des risques bancaires ; Crédit, liquidité, opérationnel, conformité, fraude ; Probabilité, impact, criticité ; Revue annuelle | Risque, Probabilité, Impact, Criticité, DMR | Cartographie des risques | 9.1, 13.2 | `/Structure [Axe]=Cartographie ; [Ch]=3` |
+                | 5 | 4. Plan d’audit | 4.1 Univers d’audit ; 4.2 Priorisation ; 4.3 Ressources ; 4.4 Révision | Directions, processus, agences ; Score de risque et rotation ; Jours-hommes et budget ; Missions ajoutées ou reportées | Univers audit, Matrice criticité | Plan annuel d’audit | 9.2, 9.4, 9.5 | `/Structure [Axe]=Plan ; [Ch]=4` |
+                | 6 | 5. Conduite des missions | 5.1 Préparation ; 5.2 Réalisation ; 5.3 Conclusion | Lettre de mission, référentiel, programme ; Tests, feuilles de couverture, FRAP ; Rapports et réunion de clôture | Objectifs, Assertions, Point de contrôle | Programme de travail, FRAP, Rapport | 13.1 à 13.6, 14.1 à 14.6, 15.1 | `/Structure [Axe]=Missions ; [Ch]=5` |
+                | 7 | 6. Suivi des recommandations | 6.1 Fichier de suivi ; 6.2 Relances ; 6.3 Vérification ; 6.4 Reporting | Statuts et priorités ; Calendrier des relances ; Preuves et re-tests ; Indicateurs de mise en œuvre | Recommandation, Plan d’action, Délai, Preuve | Suivi des recos | 14.4, 15.2 | `/Structure [Axe]=Suivi recos ; [Ch]=6` |
+                | 8 | 7. Comité d’audit | 7.1 Préparation ; 7.2 Tenue ; 7.3 Suites ; 7.4 Communication | Ordre du jour et dossier ; Procès-verbal ; Recos du comité ; Échanges avec le comité | Destinataire, Décision | Rapport au comité | 8.1, 11.3, 11.5 | `/Structure [Axe]=Comité ; [Ch]=7` |
+                | 9 | 8. Qualité et performance | 8.1 Assurance qualité ; 8.2 KPI ; 8.3 Évaluation externe | Revue des dossiers ; KPI des missions et de la période ; Programme d’amélioration | Indicateur, Conclusion | Programme qualité | 8.3, 8.4, 12.1 à 12.3 | `/Structure [Axe]=Qualité ; [Ch]=8` |
+                | 10 | 9. Annexes et outils | 9.1 Outils IFACI I à XVI ; 9.2 Modèles ; 9.3 Glossaire | Entretien, flux, QCI, CAATs ; Lettre de mission, FRAP, rapport ; Termes bancaires et d’audit | Template, Modèle | Dossier permanent | 14.6 | `/Structure [Axe]=Annexes ; [Ch]=9` |
+                
+                ---
+                
+                ### Exemple 2 : Axe « Conduite des missions d’audit », structure détaillée par étape
+                
+                *Étape/Document cible : chaîne complète lettre de mission, programme, FRAP, rapport. Mode max.*
+                
+                | No | Chapitre / Phase | Sections | Titres (niveau 3) | Rubriques audit clés | Document / Étape lié | Normes CRIPP | Command user |
+                | --- | --- | --- | --- | --- | --- | --- | --- |
+                | 1 | 5.1 Préparation | 5.1.1 Planification | Trigger de la mission ; Équipe et budget ; Calendrier | Thématique, Ressources | Planification de la mission | 13.1, 13.5 | `/Structure [Axe]=Missions ; [Section]=5.1.1` |
+                | 2 | 5.1 Préparation | 5.1.2 Lettre de mission | Objectifs et périmètre ; Période auditée ; Droits d’accès ; Livrables | Objectifs généraux et spécifiques | Lettre de mission | 13.1, 13.3 | `/Structure [Section]=5.1.2` |
+                | 3 | 5.1 Préparation | 5.1.3 Rencontre avec la Direction | Préparation ; Compte rendu ; Validation par l’audité | Table séance, Acteurs | Compte rendu de réunion | 11.1, 11.2 | `/Structure [Section]=5.1.3` |
+                | 4 | 5.1 Préparation | 5.1.4 Réunion d’ouverture | Ordre du jour ; Engagements des parties ; Points d’attention | Parties prenantes | Réunion d’ouverture | 11.1 | `/Structure [Section]=5.1.4` |
+                | 5 | 5.1 Préparation | 5.1.5 Prise de connaissance | Collecte documentaire ; Entretiens (Outil I) ; Flowchart (Outil III) ; Test de cheminement (Outil V) | Acteurs, Documents, Données clés | Collecte documentaire | 9.1, 14.1 | `/Structure [Section]=5.1.5` |
+                | 6 | 5.1 Préparation | 5.1.6 Évaluation des risques | Cartographie du processus ; Hiérarchisation (Outil VI) ; Zones à risques | Risque, Cause, Criticité | Cartographie des risques | 13.2 | `/Structure [Section]=5.1.6` |
+                | 7 | 5.1 Préparation | 5.1.7 Référentiel de contrôle interne | Plan d’approche ; Référentiel (Outil VII) ; QCI (Outil IX) ; Tableau forces/faiblesses | Contrôle clé, Conception | Référentiel, QCI | 13.4 | `/Structure [Section]=5.1.7` |
+                | 8 | 5.1 Préparation | 5.1.8 Rapport d’orientation | Objectifs retenus ; Risques ciblés ; Périmètre final | Objectifs, Points d’audit | Rapport d’orientation | 13.3 | `/Structure [Section]=5.1.8` |
+                | 9 | 5.1 Préparation | 5.1.9 Programme de travail | Objectif de contrôle ; Point de contrôle ; Assertion ; Technique d’audit ; Échantillon | Contrôle audit, Anomalies courantes | Programme de travail | 13.6, 12.3 | `/Structure [Section]=5.1.9` |
+                | 10 | 5.2 Réalisation | 5.2.1 Lancement terrain | Réunion de lancement ; Accès Core Banking ; Plan d’échantillonnage | Échantillon, Population | Programme de travail | 13.5, 14.1 | `/Structure [Section]=5.2.1` |
+                | 11 | 5.2 Réalisation | 5.2.2 Tests et feuilles de couverture | Colonnes de pointage CTR ; Écart ; Assertions ; X-Ref | Anomalie, Assertion, Écart | Feuille couverture, Feuille révision | 14.1, 14.2, 14.6 | `/Structure [Section]=5.2.2` |
+                | 12 | 5.2 Réalisation | 5.2.3 Preuves d’audit | Suffisance ; Pertinence ; Fiabilité ; Validation | Preuve, Source | Dossier de travail | 14.1 | `/Structure [Section]=5.2.3` |
+                | 13 | 5.2 Réalisation | 5.2.4 Analyse des causes | Diagramme cause/effet (Outil VIII) ; Cause racine ; Conséquences | Cause, Conséquence | FRAP | 14.2 | `/Structure [Section]=5.2.4` |
+                | 14 | 5.2 Réalisation | 5.2.5 Supervision | Revue manager ; Débriefing à mi-temps ; Ajustement du programme | Superviseur, Preparer | Revue manager | 12.3 | `/Structure [Section]=5.2.5` |
+                | 15 | 5.3 Conclusion | 5.3.1 FRAP | Les 5 C du constat ; Contradictoire ; Cotation | Critère, Condition, Cause, Conséquence, Recommandation | FRAP | 14.3, 11.2 | `/Structure [Section]=5.3.1` |
+                | 16 | 5.3 Conclusion | 5.3.2 Synthèse et rapport provisoire | Synthèse des FRAP ; Opinion ; Recommandations et plan d’action | Conclusion, Plan d’action | Rapport provisoire | 14.4, 14.5 | `/Structure [Section]=5.3.2` |
+                | 17 | 5.3 Conclusion | 5.3.3 Clôture et rapport final | Réunion de clôture ; Acceptation des risques ; Diffusion | Destinataire, Décision | Rapport final | 11.3, 11.5, 15.1 | `/Structure [Section]=5.3.3` |
+                | 18 | 5.3 Conclusion | 5.3.4 Archivage | Dossier de mission ; Revue qualité ; Conservation | Documentation | Dossier de mission | 14.6, 12.1 | `/Structure [Section]=5.3.4` |
+                
+                ---
+                
+                ### Exemple 3 : Axes « Mise en place du service » et « Charte d’audit »
+                
+                *Étape/Document cible : manuel (chapitres 1 et 2), charte d’audit, plan de démarrage.*
+                
+                | No | Chapitre | Sections | Titres (niveau 3) | Rubriques audit clés | Document / Étape lié | Normes CRIPP | Command user |
+                | --- | --- | --- | --- | --- | --- | --- | --- |
+                | 1 | 1. Mise en place | 1.1 Prise de connaissance de l’environnement | Gouvernance de la banque ; Dispositif de contrôle à 3 lignes ; Parties prenantes (DG, comité d’audit, Commission Bancaire) | Environnement de contrôle | Dossier permanent | 9.1 | `/Structure [Axe]=Mise en place ; [Section]=1.1` |
+                | 2 | 1. Mise en place | 1.2 Positionnement | Rattachement fonctionnel ; Rattachement administratif ; Séparation avec le contrôle permanent | Indépendance | Organigramme | 7.1 | `/Structure [Section]=1.2` |
+                | 3 | 1. Mise en place | 1.3 Organisation interne | Fonctions (DAI, senior, junior) ; Responsabilités ; Délégations | Personne, Rôle | Fiches de poste | 7.2, 10.2 | `/Structure [Section]=1.3` |
+                | 4 | 1. Mise en place | 1.4 Ressources humaines | Termes de référence ; Analyse des CV ; Entretien ; Accueil ; Plan de formation (fraude, LBC/FT) | Compétence | Plan de recrutement | 3.1, 3.2, 10.2 | `/Structure [Section]=1.4` |
+                | 5 | 1. Mise en place | 1.5 Ressources financières et techniques | Budget à 3 ans ; Outils d’audit ; Accès aux données | Budget | Prévisions budgétaires | 10.1, 10.3 | `/Structure [Section]=1.5` |
+                | 6 | 1. Mise en place | 1.6 Méthodologie | Rédaction du manuel ; Templates de mission ; Organisation des dossiers | Modèle | Manuel audit interne | 9.3 | `/Structure [Section]=1.6` |
+                | 7 | 1. Mise en place | 1.7 Plan de démarrage | Cartographie initiale ; Premier plan d’audit ; Communication sur l’audit | Plan d’action | Plan de mise en place | 9.4, 11.1 | `/Structure [Section]=1.7` |
+                | 8 | 2. Charte | 2.1 Mandat et missions | Assurance ; Conseil ; Périmètre (siège, agences, filiales) | Domaines | Charte d’audit | 6.1 | `/Structure [Axe]=Charte ; [Section]=2.1` |
+                | 9 | 2. Charte | 2.2 Indépendance et objectivité | Déclaration d’indépendance ; Gestion des conflits ; Signalement des atteintes | Objectivité | Déclaration d’indépendance | 2.1 à 2.3, 7.1 | `/Structure [Section]=2.2` |
+                | 10 | 2. Charte | 2.3 Autorité et accès | Accès aux personnes, documents, systèmes ; Confidentialité | Droits d’accès | Charte d’audit | 5.1, 5.2, 6.3 | `/Structure [Section]=2.3` |
+                | 11 | 2. Charte | 2.4 Déontologie | Honnêteté ; Attentes éthiques ; Aspects légaux | Éthique | Code de déontologie | 1.1 à 1.3 | `/Structure [Section]=2.4` |
+                | 12 | 2. Charte | 2.5 Obligations de reporting | Rapports périodiques ; Limitations de périmètre ; Acceptation des risques | Destinataire | Rapport d’activité | 8.1, 11.3, 11.5 | `/Structure [Section]=2.5` |
+                | 13 | 2. Charte | 2.6 Approbation et révision | Validation du Conseil ; Revue périodique ; Diffusion | Statut, Date | Charte validée | 6.2, 6.3 | `/Structure [Section]=2.6` |
+                
+                ---
+                
+                ### Exemple 4 : Axes « Cartographie des risques » et « Plan d’audit »
+                
+                *Étape/Document cible : chapitres 3 et 4, cartographie, plan pluriannuel, plan annuel.*
+                
+                | No | Chapitre | Sections | Titres (niveau 3) | Rubriques audit clés | Document / Étape lié | Normes CRIPP | Command user |
+                | --- | --- | --- | --- | --- | --- | --- | --- |
+                | 1 | 3. Cartographie | 3.1 Collecte documentaire | Organigramme ; Procédures ; Incidents ; Rapports du comité des risques | Documents, Sources | Collecte documentaire | 9.1, 14.1 | `/Structure [Axe]=Cartographie ; [Section]=3.1` |
+                | 2 | 3. Cartographie | 3.2 Univers des risques | Cycles (crédit, trésorerie, moyens de paiement, engagements) ; Processus ; Sous-processus | Cycle, Processus | Mapping processus | 9.1 | `/Structure [Section]=3.2` |
+                | 3 | 3. Cartographie | 3.3 Identification | Risques opérationnels, de fraude, de non-conformité, de crédit ; Cause racine | Risque, Cause | Cartographie des risques | 13.2 | `/Structure [Section]=3.3` |
+                | 4 | 3. Cartographie | 3.4 Cotation | Échelles de probabilité et d’impact ; Criticité brute ; Criticité nette | Probabilité, Impact, Criticité | Matrice de criticité | 13.2 | `/Structure [Section]=3.4` |
+                | 5 | 3. Cartographie | 3.5 Dispositif de maîtrise | Contrôles préventifs, détectifs ; Niveaux 1 et 2 ; Efficacité | DMR, Contrôle clé | Matrice de surveillance permanente | 9.1 | `/Structure [Section]=3.5` |
+                | 6 | 3. Cartographie | 3.6 Plan d’action et validation | Actions ; Pilotes ; Validation ; Mise à jour | Plan d’action | Cartographie validée | 9.4, 11.5 | `/Structure [Section]=3.6` |
+                | 7 | 4. Plan d’audit | 4.1 Définition de l’univers d’audit | Directions ; Agences ; Processus ; Filiales | Univers audit | Univers d’audit | 9.4 | `/Structure [Axe]=Plan ; [Section]=4.1` |
+                | 8 | 4. Plan d’audit | 4.2 Priorisation | Score de risque ; Historique de couverture ; Rotation 1/2/3 ans ; Attentes des parties prenantes | Score, Rang | Matrice de priorisation | 9.2, 9.4 | `/Structure [Section]=4.2` |
+                | 9 | 4. Plan d’audit | 4.3 Coordination des assurances | Contrôle permanent ; Conformité ; Commissaires aux comptes ; Commission Bancaire | Assurance combinée | Plan annuel d’audit | 9.5 | `/Structure [Section]=4.3` |
+                | 10 | 4. Plan d’audit | 4.4 Ressources et budget | Jours-hommes par phase ; Compétences ; Budget ; Expertise externe | Charge, Budget | Plan annuel d’audit | 8.2, 10.1, 10.2 | `/Structure [Section]=4.4` |
+                | 11 | 4. Plan d’audit | 4.5 Calendrier et fiches de mission | Planning trimestriel ; Fiches synthétiques de mission | Objectifs, Période | Plan annuel d’audit | 9.4, 13.3 | `/Structure [Section]=4.5` |
+                | 12 | 4. Plan d’audit | 4.6 Validation et pilotage | Approbation du comité d’audit ; Révision en cours d’année ; Réserve de capacité | Décision, Statut | Rapport plan audit | 6.3, 8.1, 9.4 | `/Structure [Section]=4.6` |
+                
+                ---
+                
+                ### Exemple 5 : Axe « Suivi des recommandations »
+                
+                *Étape/Document cible : chapitre 6, fichier de suivi, plan de recommandation de surveillance permanente.*
+                
+                | No | Chapitre | Sections | Titres (niveau 3) | Rubriques audit clés | Document / Étape lié | Normes CRIPP | Command user |
+                | --- | --- | --- | --- | --- | --- | --- | --- |
+                | 1 | 6. Suivi des recos | 6.1 Principes | Rôles audit, audité, comité ; Périmètre ; Responsabilités | Rôle, Périmètre | Procédure de suivi | 15.2 | `/Structure [Axe]=Suivi recos ; [Section]=6.1` |
+                | 2 | 6. Suivi des recos | 6.2 Fichier de suivi | Référence FRAP ; Mission source ; Priorité P1/P2/P3 ; Statut | Recommandation, Priorité | Suivi des recos | 14.4 | `/Structure [Section]=6.2` |
+                | 3 | 6. Suivi des recos | 6.3 Plan d’action de l’audité | Action ; Pilote ; Échéance ; Livrable | Plan d’action, Délai | Plan d’action | 14.4 | `/Structure [Section]=6.3` |
+                | 4 | 6. Suivi des recos | 6.4 Relances | Calendrier ; Modes de relance ; Escalade hiérarchique | Relance | Tableau de relances | 11.1 | `/Structure [Section]=6.4` |
+                | 5 | 6. Suivi des recos | 6.5 Collecte et validation des preuves | Nature de la preuve ; Fiabilité ; Date de réception | Preuve | Dossier de preuves | 14.1 | `/Structure [Section]=6.5` |
+                | 6 | 6. Suivi des recos | 6.6 Vérification par l’audit | Revue documentaire ; Re-performance ; Observation ; Re-test | Test, Niveau d’assurance | Feuille de suivi | 15.2 | `/Structure [Section]=6.6` |
+                | 7 | 6. Suivi des recos | 6.7 Acceptation du risque | Motif ; Décideur ; Durée ; Information du comité | Risque accepté | Note d’acceptation | 11.5 | `/Structure [Section]=6.7` |
+                | 8 | 6. Suivi des recos | 6.8 Intégration dans les autres étapes | Risques des recos non réalisées vers cartographie ; Contrôles clés vers matrice de surveillance ; Recos vers procédures | Risque, Contrôle clé | Cartographie, Matrice | 9.1, 13.2 | `/Structure [Section]=6.8` |
+                | 9 | 6. Suivi des recos | 6.9 Clôture | Statuts (soldée, partielle, abandonnée) ; Double validation | Statut final | Fiche de clôture | 12.3, 15.2 | `/Structure [Section]=6.9` |
+                | 10 | 6. Suivi des recos | 6.10 KPI et reporting | Taux de mise en œuvre ; Recos échues ; Délai moyen ; Tendance trimestrielle | Indicateur | Rapport d’activité | 12.2, 11.3 | `/Structure [Section]=6.10` |
+                
+                ---
+                
+                ### Exemple 6 : Axe « Comité d’audit » et reporting aux organes
+                
+                *Étape/Document cible : chapitre 7, rapports au comité, communication à la Commission Bancaire.*
+                
+                | No | Chapitre | Sections | Titres (niveau 3) | Rubriques audit clés | Document / Étape lié | Normes CRIPP | Command user |
+                | --- | --- | --- | --- | --- | --- | --- | --- |
+                | 1 | 7. Comité d’audit | 7.1 Cadre et composition | Mandat ; Membres ; Fréquence ; Quorum | Instance, Membres | Charte du comité | 6.3, 8.1 | `/Structure [Axe]=Comité ; [Section]=7.1` |
+                | 2 | 7. Comité d’audit | 7.2 Préparation des réunions | Ordre du jour ; Dossier ; Synthèse des missions ; Convocation | Ordre du jour | Dossier du comité | 11.1 | `/Structure [Section]=7.2` |
+                | 3 | 7. Comité d’audit | 7.3 Tenue des réunions | Présentation du plan et des rapports ; Débats ; Décisions | Décision | Procès-verbal | 11.2, 11.3 | `/Structure [Section]=7.3` |
+                | 4 | 7. Comité d’audit | 7.4 Rapports périodiques | Rapport d’activité ; Recos critiques ouvertes ; Limitations de ressources | Indicateur, Conclusion | Rapport au comité | 8.1, 11.3, 8.2 | `/Structure [Section]=7.4` |
+                | 5 | 7. Comité d’audit | 7.5 Suites du comité | Recos du comité ; Affectation ; Suivi | Plan d’action | Suivi des décisions | 15.2 | `/Structure [Section]=7.5` |
+                | 6 | 7. Comité d’audit | 7.6 Communication avec les membres | Échanges hors séance ; Alertes (fraude, risque majeur) ; Confidentialité | Alerte | Note d’alerte | 11.1, 5.2 | `/Structure [Section]=7.6` |
+                | 7 | 7. Comité d’audit | 7.7 Reporting à la DG et au Conseil | Format ; Périodicité ; Niveaux de confidentialité | Destinataire | Reporting DG/CA | 11.3 | `/Structure [Section]=7.7` |
+                | 8 | 7. Comité d’audit | 7.8 Relations avec les autorités | Commission Bancaire ; BCEAO ; Rapports réglementaires sur le contrôle interne | Texte réglementaire | Rapport réglementaire | 9.1, 11.1 | `/Structure [Section]=7.8` |
+                | 9 | 7. Comité d’audit | 7.9 Relations avec les commissaires aux comptes | Accueil ; Demandes documentaires ; Échanges sur le dispositif de maîtrise des risques | CAC | Plan de coordination | 9.5 | `/Structure [Section]=7.9` |
+                | 10 | 7. Comité d’audit | 7.10 Qualité et évaluation externe | Programme d’assurance qualité ; Évaluation externe ; Plan d’amélioration | Qualité | Programme qualité | 8.3, 8.4, 12.1 | `/Structure [Section]=7.10` |
+                
+                ---
+                
+                **Remarques de modélisation**
+                
+                - Les [Rubrique audit] sont [Correlation] entre structures : « Risque » (ex. 4) alimente le programme de travail (ex. 2) et le suivi des recos (ex. 5).
+                - Les mentions réglementaires (BCEAO, Commission Bancaire) sont à contextualiser avec les textes en vigueur de votre cible avant diffusion.
+                
+                Je peux enchaîner avec [Modelisation design [Json schema]] sur l’une de ces structures. Dites-moi laquelle.
+                
+                Ajoute tous les autrs chapitres que tu jugeras necessaire
+                
+                ## Modelisation design [Structure] : chapitres complémentaires du manuel d’audit interne bancaire
+                
+                **Mode** : max. **Extension du périmètre** : les 7 [Axe clé] d’origine sont complétés par **11 axes complémentaires**.
+                
+                **Renumérotation** : les chapitres 0 à 8 restent inchangés. Les nouveaux chapitres prennent les n° 9 à 22, et **les Annexes passent au chapitre 23**.
+                
+                ---
+                
+                ### Vue d’ensemble : sommaire final du manuel (24 chapitres)
+                
+                | No | Chapitre | Statut | Axe | Normes CRIPP dominantes | Command user |
+                | --- | --- | --- | --- | --- | --- |
+                | 1 | 0. Cadre général | Existant | Cadre | 4.1, 9.3 | `/Structure [Ch]=0` |
+                | 2 | 1. Mise en place du service | Existant | Axe clé | 7.1, 8.2, 10.1, 10.2 | `/Structure [Ch]=1` |
+                | 3 | 2. Charte d’audit | Existant | Axe clé | 1.1 à 2.3, 6.1 à 6.3 | `/Structure [Ch]=2` |
+                | 4 | 3. Cartographie des risques | Existant | Axe clé | 9.1, 13.2 | `/Structure [Ch]=3` |
+                | 5 | 4. Plan d’audit | Existant | Axe clé | 9.2, 9.4, 9.5 | `/Structure [Ch]=4` |
+                | 6 | 5. Conduite des missions | Existant | Axe clé | 13.1 à 15.1 | `/Structure [Ch]=5` |
+                | 7 | 6. Suivi des recommandations | Existant | Axe clé | 14.4, 15.2 | `/Structure [Ch]=6` |
+                | 8 | 7. Comité d’audit | Existant | Axe clé | 8.1, 11.3, 11.5 | `/Structure [Ch]=7` |
+                | 9 | 8. Qualité et performance | Existant | Axe clé | 8.3, 8.4, 12.1 à 12.3 | `/Structure [Ch]=8` |
+                | 10 | **9. Techniques et outils d’audit** | **Nouveau** | Méthodologie | 9.3, 14.1 | `/Structure [Ch]=9` |
+                | 11 | **10. Échantillonnage et analyse de données** | **Nouveau** | Méthodologie | 14.1, 14.2 | `/Structure [Ch]=10` |
+                | 12 | **11. Communication, rapports et contradictoire** | **Nouveau** | Méthodologie | 11.1 à 11.5, 15.1 | `/Structure [Ch]=11` |
+                | 13 | **12. Audit du crédit et des engagements** | **Nouveau** | Audit thématique | 13.2, 14.2 | `/Structure [Ch]=12` |
+                | 14 | **13. Audit de la trésorerie et de la caisse** | **Nouveau** | Audit thématique | 13.2, 14.1 | `/Structure [Ch]=13` |
+                | 15 | **14. Audit des moyens de paiement et de la monétique** | **Nouveau** | Audit thématique | 13.2, 14.2 | `/Structure [Ch]=14` |
+                | 16 | **15. Audit des agences et du réseau** | **Nouveau** | Audit thématique | 13.3, 14.1 | `/Structure [Ch]=15` |
+                | 17 | **16. Audit de la conformité et de la LBC/FT** | **Nouveau** | Audit thématique | 1.3, 13.4 | `/Structure [Ch]=16` |
+                | 18 | **17. Audit des systèmes d’information et de la cybersécurité** | **Nouveau** | Audit thématique | 10.3, 14.1 | `/Structure [Ch]=17` |
+                | 19 | **18. Audit de l’externalisation et de la continuité d’activité** | **Nouveau** | Audit thématique | 9.1, 13.2 | `/Structure [Ch]=18` |
+                | 20 | **19. Fraude, investigations et missions spéciales** | **Nouveau** | Risque spécifique | 11.3, 14.3 | `/Structure [Ch]=19` |
+                | 21 | **20. Missions de conseil** | **Nouveau** | Service | 6.1, 13.1 | `/Structure [Ch]=20` |
+                | 22 | **21. Audit des filiales et du groupe** | **Nouveau** | Périmètre | 9.4, 9.5 | `/Structure [Ch]=21` |
+                | 23 | **22. Organisation, dossiers de mission et gestion documentaire** | **Nouveau** | Support | 14.6, 5.2 | `/Structure [Ch]=22` |
+                | 24 | **23. Relations avec les parties prenantes externes** (CAC, régulateurs) | **Nouveau** | Support | 9.5, 11.1 | `/Structure [Ch]=23` |
+                | 25 | **24. Annexes et outils** (ex-chapitre 9) | Déplacé | Support | 14.6 | `/Structure [Ch]=24` |
+                
+                ---
+                
+                ### Exemple 7 : Axe « Méthodologie » (chapitres 9, 10, 11)
+                
+                *Étape/Document cible : techniques d’audit, échantillonnage, rapports.*
+                
+                | No | Chapitre | Sections | Titres (niveau 3) | Rubriques audit clés | Document / Étape lié | Normes CRIPP | Command user |
+                | --- | --- | --- | --- | --- | --- | --- | --- |
+                | 1 | 9. Techniques et outils | 9.1 Panorama des techniques | Entretien (Outil I) ; Observation (Outil XIV) ; Revue documentaire ; Recalcul ; Circularisation (Outil XII) | Technique d’audit | Programme de travail | 9.3, 14.1 | `/Structure [Axe]=Méthodologie ; [Section]=9.1` |
+                | 2 | 9. Techniques et outils | 9.2 Analyse des processus | Grille d’analyse des tâches (Outil II) ; Diagramme de flux (Outil III) ; Approche processus (Outil IV) | Tâche clé, Acteur | Flowchart, Cartographie de processus | 9.1, 13.2 | `/Structure [Section]=9.2` |
+                | 3 | 9. Techniques et outils | 9.3 Test de cheminement et piste d’audit | Choix de l’opération ; Suivi bout en bout ; Piste d’audit (Outil XI) ; Rupture de chaîne | Piste d’audit, Document | Test de cheminement | 14.1 | `/Structure [Section]=9.3` |
+                | 4 | 9. Techniques et outils | 9.4 Évaluation du contrôle interne | QCI (Outil IX) ; Tableau des forces et faiblesses ; Conception et permanence | Conception, Permanence | QCI | 13.4, 14.2 | `/Structure [Section]=9.4` |
+                | 5 | 9. Techniques et outils | 9.5 Hiérarchisation et analyse des causes | Hiérarchisation des risques (Outil VI) ; Cause/effet (Outil VIII) ; Brainstorming (Outil X) | Risque, Cause | FRAP | 13.2, 14.2 | `/Structure [Section]=9.5` |
+                | 6 | 9. Techniques et outils | 9.6 Procédures analytiques | Revue analytique (Outil XIII) ; Ratios bancaires ; Tendances | Ratio, Écart | Revue analytique | 14.1 | `/Structure [Section]=9.6` |
+                | 7 | 9. Techniques et outils | 9.7 Outils bureautiques et scripts | Fonctions Excel ; Tableaux croisés dynamiques ; Scripts Python | Formule, Données | Feuille de test | 10.3 | `/Structure [Section]=9.7` |
+                | 8 | 10. Échantillonnage et données | 10.1 Définition de la population | Source (Core Banking, GL) ; Exhaustivité de l’extraction ; Période | Population, Données | Extraction | 14.1 | `/Structure [Axe]=Méthodologie ; [Section]=10.1` |
+                | 9 | 10. Échantillonnage et données | 10.2 Méthodes de sélection | Statistique (Outil XV) ; Raisonné ; Inopiné ; Taille selon le risque | Échantillon | Plan d’échantillonnage | 14.1 | `/Structure [Section]=10.2` |
+                | 10 | 10. Échantillonnage et données | 10.3 CAATs | Extraction ; Tests sur 100 % (doublons, seuils, ruptures de séquence) ; Contrôle de l’intégrité | CAATs (Outil XVI), Anomalie | Feuille couverture | 10.3, 14.1 | `/Structure [Section]=10.3` |
+                | 11 | 10. Échantillonnage et données | 10.4 Pointage et symboles | Colonnes CTR ; Légende (+, −, N/A) ; Calcul de l’écart | CTR, Écart | Table légende, Table de test | 14.1, 14.6 | `/Structure [Section]=10.4` |
+                | 12 | 10. Échantillonnage et données | 10.5 Conclusion par assertion | Validité, exhaustivité, séparation des exercices, comptabilisation, évaluation, présentation | Assertion | Feuille révision | 14.2, 14.3 | `/Structure [Section]=10.5` |
+                | 13 | 10. Échantillonnage et données | 10.6 Extrapolation | Taux d’anomalie ; Montant extrapolé ; Limites | Taux d’anomalie | Rapport | 14.3 | `/Structure [Section]=10.6` |
+                | 14 | 11. Communication et rapports | 11.1 Principes de communication | Exactitude ; Clarté ; Opportunité ; Destinataires | Destinataire | Rapport d’audit | 11.2 | `/Structure [Axe]=Méthodologie ; [Section]=11.1` |
+                | 15 | 11. Communication et rapports | 11.2 FRAP et constats | 5 C ; Gravité ; Cotation ; Régularisation comptable SYSCOHADA | Constat, Gravité | FRAP | 14.2, 14.3 | `/Structure [Section]=11.2` |
+                | 16 | 11. Communication et rapports | 11.3 Procédure contradictoire | Validation par l’audité ; Désaccords ; Réserve maintenue | Position de l’audité | FRAP validée | 11.2, 11.3 | `/Structure [Section]=11.3` |
+                | 17 | 11. Communication et rapports | 11.4 Rapport provisoire et final | Synthèse exécutive ; Opinion ; Plan d’action ; Annexes | Opinion, Conclusion | Rapport provisoire, Rapport final | 14.5, 15.1 | `/Structure [Section]=11.4` |
+                | 18 | 11. Communication et rapports | 11.5 Erreurs et omissions | Correction des rapports ; Information des destinataires | Erreur | Rapport corrigé | 11.4 | `/Structure [Section]=11.5` |
+                | 19 | 11. Communication et rapports | 11.6 Acceptation des risques | Alerte à la Direction ; Escalade au comité d’audit | Risque accepté | Note d’acceptation | 11.5 | `/Structure [Section]=11.6` |
+                
+                ---
+                
+                ### Exemple 8 : Axe « Audits thématiques bancaires » (chapitres 12 à 15)
+                
+                *Étape/Document cible : programmes de travail types, référentiels de contrôle interne par cycle.*
+                
+                | No | Chapitre | Sections | Titres (niveau 3) | Rubriques audit clés | Document / Étape lié | Normes CRIPP | Command user |
+                | --- | --- | --- | --- | --- | --- | --- | --- |
+                | 1 | 12. Crédit et engagements | 12.1 Octroi | Dossier de crédit ; Analyse de risque ; Délégations et comités ; Garanties | Dossier, Contrôle clé | Programme de travail crédit | 13.2, 13.4 | `/Structure [Axe]=Crédit ; [Section]=12.1` |
+                | 2 | 12. Crédit et engagements | 12.2 Mise en place et déblocage | Conditions suspensives ; Double validation ; Déblocage | Autorisation | Feuille couverture | 14.1 | `/Structure [Section]=12.2` |
+                | 3 | 12. Crédit et engagements | 12.3 Suivi et recouvrement | Impayés ; Déclassement ; Provisionnement ; Recouvrement | Évaluation, Provision | Feuille révision | 14.2 | `/Structure [Section]=12.3` |
+                | 4 | 12. Crédit et engagements | 12.4 Concentration et ratios | Division des risques ; Ratios prudentiels | Seuil, Ratio | Revue analytique | 9.1 | `/Structure [Section]=12.4` |
+                | 5 | 13. Trésorerie et caisse | 13.1 Sécurité de la caisse | Arrêté quotidien ; Coffre ; Accès ; Plafond d’encaisse | Contrôle clé | Programme caisse | 13.2 | `/Structure [Axe]=Trésorerie ; [Section]=13.1` |
+                | 6 | 13. Trésorerie et caisse | 13.2 Inventaires de caisse | Inopiné ; PV ; Écarts ; Signatures conjointes | Écart, X-Ref | Feuille couverture | 14.1 | `/Structure [Section]=13.2` |
+                | 7 | 13. Trésorerie et caisse | 13.3 Approvisionnement et remises en banque | Convoyage de fonds ; Bordereaux ; Rapprochement relevé | Piste d’audit | Test de cheminement | 14.1 | `/Structure [Section]=13.3` |
+                | 8 | 13. Trésorerie et caisse | 13.4 Rapprochements bancaires | Périodicité ; Visa du DAF ; Suspens anciens | Rapprochement | Feuille révision | 14.2 | `/Structure [Section]=13.4` |
+                | 9 | 13. Trésorerie et caisse | 13.5 Liquidité et placements | Gestion de la liquidité ; Opérations interbancaires ; Limites | Limite, Autorisation | Programme de travail | 13.2 | `/Structure [Section]=13.5` |
+                | 10 | 14. Moyens de paiement | 14.1 Virements et chèques | Habilitations ; Double clé ; Chèques certifiés ; Rejets | Maker-Checker | Programme de travail | 13.2 | `/Structure [Axe]=Paiement ; [Section]=14.1` |
+                | 11 | 14. Moyens de paiement | 14.2 Cartes et monétique | Émission ; Plafonds ; GAB ; Rapprochement des flux | Donnée, Interface | Feuille couverture | 14.1 | `/Structure [Section]=14.2` |
+                | 12 | 14. Moyens de paiement | 14.3 Mobile banking et services numériques | Alertes SMS/OTP ; Changement de coordonnées ; Plafonds | Habilitation | Programme SI | 10.3 | `/Structure [Section]=14.3` |
+                | 13 | 14. Moyens de paiement | 14.4 Comptes de passage et suspens | Ancienneté ; Justification ; Apurement | Suspens | Feuille révision | 14.2 | `/Structure [Section]=14.4` |
+                | 14 | 15. Agences et réseau | 15.1 Organisation d’une agence | Séparation des fonctions ; Délégations ; Suppléance | Séparation des fonctions | Cartographie de processus | 9.1 | `/Structure [Axe]=Réseau ; [Section]=15.1` |
+                | 15 | 15. Agences et réseau | 15.2 Opérations de guichet | Encaissements ; Décaissements ; Clôture de caisse | Contrôle clé | Programme de travail | 13.2 | `/Structure [Section]=15.2` |
+                | 16 | 15. Agences et réseau | 15.3 Comptes dormants et inactifs | Levée de blocage ; Mandat de justice ; Double clé | Compte inactif | Feuille couverture | 14.1 | `/Structure [Section]=15.3` |
+                | 17 | 15. Agences et réseau | 15.4 Sécurité physique | Coffre ; Alarme ; Vidéosurveillance ; Plan d’urgence | Zone à risque | Observation | 13.2 | `/Structure [Section]=15.4` |
+                | 18 | 15. Agences et réseau | 15.5 Comparaison inter-agences | Écarts de pratiques ; Indicateurs ; Agences à risque | Indicateur, KRI | Revue analytique | 9.4 | `/Structure [Section]=15.5` |
+                
+                ---
+                
+                ### Exemple 9 : Axe « Conformité, SI et résilience » (chapitres 16 à 18)
+                
+                *Étape/Document cible : programmes de travail réglementaires et informatiques, cartographie de conformité.*
+                
+                | No | Chapitre | Sections | Titres (niveau 3) | Rubriques audit clés | Document / Étape lié | Normes CRIPP | Command user |
+                | --- | --- | --- | --- | --- | --- | --- | --- |
+                | 1 | 16. Conformité et LBC/FT | 16.1 Cadre réglementaire | Textes BCEAO ; Dispositions de la Commission Bancaire ; Loi uniforme LBC/FT UEMOA ; Sanctions | Texte réglementaire | Référentiel de conformité | 1.3, 13.4 | `/Structure [Axe]=Conformité ; [Section]=16.1` |
+                | 2 | 16. Conformité et LBC/FT | 16.2 Connaissance client (KYC) | Identification ; Personnes politiquement exposées ; Mise à jour | Dossier client | Programme de travail | 13.2 | `/Structure [Section]=16.2` |
+                | 3 | 16. Conformité et LBC/FT | 16.3 Surveillance des opérations | Profils ; Alertes ; Déclarations de soupçon ; Délais | Alerte, Transactions | Feuille couverture | 14.1 | `/Structure [Section]=16.3` |
+                | 4 | 16. Conformité et LBC/FT | 16.4 Formation et gouvernance | Responsable conformité ; Formation du personnel ; Reporting | Compétence | Plan de formation | 3.2, 8.1 | `/Structure [Section]=16.4` |
+                | 5 | 16. Conformité et LBC/FT | 16.5 Déclarations réglementaires | États périodiques ; Exactitude ; Respect des délais | Exigence, Sanction | Rapport réglementaire | 11.1 | `/Structure [Section]=16.5` |
+                | 6 | 17. SI et cybersécurité | 17.1 Gouvernance du SI | Schéma directeur ; Organisation ; Budget | Application | Cartographie SI | 10.3 | `/Structure [Axe]=SI ; [Section]=17.1` |
+                | 7 | 17. SI et cybersécurité | 17.2 Habilitations et accès | Profils ; Départs et mutations ; Comptes privilégiés | Droits d’accès | Matrice d’habilitations | 13.2 | `/Structure [Section]=17.2` |
+                | 8 | 17. SI et cybersécurité | 17.3 Contrôles applicatifs du Core Banking | Paramétrage ; Interfaces ; Piste d’audit ; Séparation des fonctions | Contrôle automatisé | Programme de travail SI | 14.1 | `/Structure [Section]=17.3` |
+                | 9 | 17. SI et cybersécurité | 17.4 Sécurité et cyber-risques | Gestion des vulnérabilités ; Sauvegardes ; Détection des incidents | Zone à risque | Cartographie des risques SI | 13.2 | `/Structure [Section]=17.4` |
+                | 10 | 17. SI et cybersécurité | 17.5 Protection de l’information | Données clients ; Accès aux données de l’audit ; Conservation | Information sensible | Charte d’accès | 5.1, 5.2 | `/Structure [Section]=17.5` |
+                | 11 | 18. Externalisation et continuité | 18.1 Externalisation | Contrats ; Niveaux de service ; Droit d’audit ; Sortie | Tiers | Programme de travail | 9.1, 13.2 | `/Structure [Axe]=Résilience ; [Section]=18.1` |
+                | 12 | 18. Externalisation et continuité | 18.2 Plan de continuité d’activité | Analyse d’impact ; Plan de repli ; Tests | Scénario de crise | Plan de continuité | 13.2 | `/Structure [Section]=18.2` |
+                | 13 | 18. Externalisation et continuité | 18.3 Gestion des incidents | Détection ; Escalade ; Clôture ; Retour d’expérience | Incident | Registre des incidents | 13.2 | `/Structure [Section]=18.3` |
+                | 14 | 18. Externalisation et continuité | 18.4 Risques émergents | Cyber ; Tiers ; Fraude numérique ; Signaux faibles | Risque émergent | Cartographie des risques | 9.1 | `/Structure [Section]=18.4` |
+                
+                ---
+                
+                ### Exemple 10 : Axe « Fraude, conseil et groupe » (chapitres 19 à 21)
+                
+                *Étape/Document cible : investigations, missions de conseil, audit de filiales.*
+                
+                | No | Chapitre | Sections | Titres (niveau 3) | Rubriques audit clés | Document / Étape lié | Normes CRIPP | Command user |
+                | --- | --- | --- | --- | --- | --- | --- | --- |
+                | 1 | 19. Fraude et investigations | 19.1 Prévention | Triangle de la fraude ; Cartographie des fraudes ; Culture éthique | Scénario de fraude | Cartographie des risques | 1.2, 13.2 | `/Structure [Axe]=Fraude ; [Section]=19.1` |
+                | 2 | 19. Fraude et investigations | 19.2 Détection | Signaux d’alerte ; Analyse de données ; Dispositif d’alerte interne | Signal d’alerte | Programme de travail | 4.3, 14.1 | `/Structure [Section]=19.2` |
+                | 3 | 19. Fraude et investigations | 19.3 Conduite d’une investigation | Déclenchement ; Équipe ; Préservation des preuves ; Présomption d’innocence | Preuve | Lettre de mission spéciale | 5.2, 14.1 | `/Structure [Section]=19.3` |
+                | 4 | 19. Fraude et investigations | 19.4 Escalade et suites | Information du comité ; Mesures disciplinaires et judiciaires ; Régularisations | Décision | Rapport d’investigation | 11.3 | `/Structure [Section]=19.4` |
+                | 5 | 19. Fraude et investigations | 19.5 Retour d’expérience | Mise à jour de la cartographie ; Nouveaux contrôles | Contrôle clé | Matrice de surveillance permanente | 14.4 | `/Structure [Section]=19.5` |
+                | 6 | 20. Missions de conseil | 20.1 Cadre | Acceptation ; Préservation de l’indépendance ; Portée | Objectivité | Lettre de mission | 2.1, 6.1 | `/Structure [Axe]=Conseil ; [Section]=20.1` |
+                | 7 | 20. Missions de conseil | 20.2 Types d’intervention | Revue de procédures ; Accompagnement de projets ; Formation | Nature | Fiche de mission | 13.1 | `/Structure [Section]=20.2` |
+                | 8 | 20. Missions de conseil | 20.3 Participation aux comités | Rôle d’observateur ; Limites ; Traçabilité | Rôle | Compte rendu | 2.2 | `/Structure [Section]=20.3` |
+                | 9 | 20. Missions de conseil | 20.4 Restitution | Livrables ; Suivi des suites | Livrable | Rapport de conseil | 11.3 | `/Structure [Section]=20.4` |
+                | 10 | 21. Filiales et groupe | 21.1 Gouvernance de groupe | Rattachement fonctionnel ; Charte groupe ; Reporting | Entité | Charte de groupe | 7.1, 9.5 | `/Structure [Axe]=Groupe ; [Section]=21.1` |
+                | 11 | 21. Filiales et groupe | 21.2 Planification consolidée | Univers d’audit groupe ; Coordination avec les audits locaux | Univers audit | Plan d’audit de groupe | 9.4 | `/Structure [Section]=21.2` |
+                | 12 | 21. Filiales et groupe | 21.3 Spécificités locales | Réglementation du pays ; Langue ; Pratiques locales | Texte réglementaire | Programme adapté | 13.4 | `/Structure [Section]=21.3` |
+                | 13 | 21. Filiales et groupe | 21.4 Consolidation des résultats | Synthèse groupe ; Comparaison des entités ; Recos transversales | Indicateur | Rapport de groupe | 11.3, 15.2 | `/Structure [Section]=21.4` |
+                
+                ---
+                
+                ### Exemple 11 : Axe « Support, organisation et parties prenantes » (chapitres 22, 23, 24)
+                
+                *Étape/Document cible : dossier permanent, archivage, relations CAC, annexes.*
+                
+                | No | Chapitre | Sections | Titres (niveau 3) | Rubriques audit clés | Document / Étape lié | Normes CRIPP | Command user |
+                | --- | --- | --- | --- | --- | --- | --- | --- |
+                | 1 | 22. Organisation et documentation | 22.1 Dossier permanent | Charte ; Organigramme ; Cartographie ; Manuels ; Textes | Document | Dossier permanent | 14.6 | `/Structure [Axe]=Support ; [Section]=22.1` |
+                | 2 | 22. Organisation et documentation | 22.2 Dossier de mission | Structure ; Codification et X-Ref ; Statut de revue | X-Ref | Dossier de mission | 14.6 | `/Structure [Section]=22.2` |
+                | 3 | 22. Organisation et documentation | 22.3 Templates de mission | Lettre de mission ; QCI ; Feuilles de test ; FRAP ; Rapport | Modèle | Templates | 9.3 | `/Structure [Section]=22.3` |
+                | 4 | 22. Organisation et documentation | 22.4 Archivage et confidentialité | Durée de conservation ; Accès ; Sécurité | Conservation | Politique d’archivage | 5.1, 5.2 | `/Structure [Section]=22.4` |
+                | 5 | 22. Organisation et documentation | 22.5 Gestion du manuel | Rédaction ; Mise à jour ; Diffusion ; Formation | Version | Manuel audit interne | 9.3 | `/Structure [Section]=22.5` |
+                | 6 | 22. Organisation et documentation | 22.6 Compétences et formation continue | Méthodologie ; Normes CRIPP ; Fraude ; Blanchiment ; Rédaction | Formation | Plan de formation | 3.1, 3.2 | `/Structure [Section]=22.6` |
+                | 7 | 22. Organisation et documentation | 22.7 Pilotage de l’activité | KPI des missions ; KPI de la période ; Tableaux de bord ; Rapport d’activité | KPI | Tableau de bord | 12.2 | `/Structure [Section]=22.7` |
+                | 8 | 22. Organisation et documentation | 22.8 Apurement des missions et supervision | Revue des dossiers ; Débriefing à mi-parcours ; Relances documentaires | Statut de revue | Revue manager | 12.3 | `/Structure [Section]=22.8` |
+                | 9 | 23. Parties prenantes externes | 23.1 Commissaires aux comptes | Accueil ; Demandes documentaires ; Échanges sur le dispositif de maîtrise des risques | CAC | Plan de coordination | 9.5 | `/Structure [Axe]=Externe ; [Section]=23.1` |
+                | 10 | 23. Parties prenantes externes | 23.2 Autorités de supervision | BCEAO ; Commission Bancaire ; Missions de contrôle | Autorité | Rapport réglementaire | 11.1 | `/Structure [Section]=23.2` |
+                | 11 | 23. Parties prenantes externes | 23.3 Autres audits | Audit de groupe ; Certification ; Évaluation externe de l’audit | Assurance combinée | Plan d’assurance | 8.4, 9.5 | `/Structure [Section]=23.3` |
+                | 12 | 24. Annexes | 24.1 Outils IFACI I à XVI | Fiches de mise en œuvre par outil | Outil | Boîte à outils | 9.3 | `/Structure [Axe]=Annexes ; [Section]=24.1` |
+                | 13 | 24. Annexes | 24.2 Modèles de documents | Lettre de mission ; QCI ; FRAP ; Rapport ; Fiche de suivi | Template | Modèles | 14.6 | `/Structure [Section]=24.2` |
+                | 14 | 24. Annexes | 24.3 Référentiels de contrôle interne par cycle | Crédit ; Trésorerie ; Paiement ; Agence | Référentiel | Référentiel d’audit | 13.4 | `/Structure [Section]=24.3` |
+                | 15 | 24. Annexes | 24.4 Glossaire et abréviations | Termes d’audit ; Termes bancaires UMOA ; Sigles | Libellé | Glossaire | 11.2 | `/Structure [Section]=24.4` |
+                
+                ---
+                
+                **Notes de modélisation**
+                
+                - J’ai créé 11 axes complémentaires : Méthodologie, Crédit, Trésorerie, Paiement, Réseau, Conformité, SI, Résilience, Fraude, Conseil, Groupe, Support et Externe. Ils prolongent vos 7 [Axe clé].
+                - Les chapitres 12 à 18 sont des audits thématiques. Chacun peut ensuite être décliné en [Programme de travail], [Cartographie des risques] et [Matrice de surveillance permanente].
+                - Je n’ai utilisé que les normes de votre liste CRIPP. Les textes BCEAO, Commission Bancaire et LBC/FT sont cités par nature et sont à référencer avec leurs numéros en vigueur avant diffusion.
+                
+                Je peux enchaîner avec le [Json schema] du manuel complet, ou détailler un chapitre en [Mode] = max (par exemple le chapitre 13 « Trésorerie et caisse »). Lequel souhaitez-vous ?
+                
+            - J
+    - Workflow documentaire service audit interne
+        - [Exemple json]
+    - Workflow documentaire examen CIA
+        - [Exemple json]
+    - [Workflow document mission
+        - 
+    - Workflow cartographie des processus
+        - [Cartographie des processus]
+            - Désigné l’ensemble.de tous les processus liés aux activités, formalisées ou pas, lies aux 'activité
+        - [Cartographie des procédures]
+            - La decomposition par direction, cycle, processus, sous processus, opérations, tâches,
+        - [Cartographie des risques]
+            - La cartographie des risques de l'entité et ou du service audit de l'année N et des années N-K
+        - [Cartographie des activités de contrôle]
+        - [Cartographie des risques]
+        - [Cartographie des recos]
+        - [Cartographie des document]
+    - ,
