@@ -20,7 +20,9 @@ import {
 } from './data/workflowCatalog';
 import {
   FeuilleCouvertureDocument,
+  generateCollectionDataJson,
   generateRandomFeuilleCouvertureJson,
+  IntegratedCollectionDocument,
 } from './data/feuilleCouvertureTemplates';
 import {
   AccordionMode,
@@ -47,6 +49,7 @@ import {
 import {
   addChildNodeToTarget,
   addCrossReferenceToNode,
+  addExistingNodesToCollection,
   addReviewNoteToNode,
   addWorkflowToExercice,
   appendAuditTrailToNodes,
@@ -54,6 +57,7 @@ import {
   assignNodesInTree,
   collectAllExpandableWorkflowIds,
   collectAllWorkflowNodeIds,
+  collectDocumentsInNode,
   collectSubtreeExpandableIds,
   createBlankWorkflowNode,
   deleteNodesInTree,
@@ -68,6 +72,7 @@ import {
   insertNodesAtTarget,
   isNodeLockedOrWithinLockedAncestor,
   lockNodesInTree,
+  mergeCollectionsInTree,
   moveNodesByDirection,
   moveNodesToTarget,
   NodeMoveDirection,
@@ -145,6 +150,10 @@ export default function App() {
   const [integratedDataDoc, setIntegratedDataDoc] = useState<{
     node: WorkflowTreeNode;
     data: FeuilleCouvertureDocument;
+  } | null>(null);
+  const [integratedCollectionDoc, setIntegratedCollectionDoc] = useState<{
+    node: WorkflowTreeNode;
+    data: IntegratedCollectionDocument;
   } | null>(null);
   const [undoStack, setUndoStack] = useState<HistorySnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<HistorySnapshot[]>([]);
@@ -403,6 +412,7 @@ export default function App() {
         return;
       }
       setIntegratedDataDoc(null);
+      setIntegratedCollectionDoc(null);
       setOpenedWordDoc(docNode);
       setHighlightedNodeId(docNode.id);
       flashStatus(`Document Word simulé ouvert : « ${docNode.label}.docx »`);
@@ -421,6 +431,7 @@ export default function App() {
         generated['Etape mission - Feuille couverture'].find((e) => 'table 1' in e)?.['table 1']?.[0]
           ?.Reference || 'Feuille couverture';
       setOpenedWordDoc(null);
+      setIntegratedCollectionDoc(null);
       setIntegratedDataDoc({ node: docNode, data: generated });
       setHighlightedNodeId(docNode.id);
       flashStatus(`Data JSON collectée pour « ${docNode.label} » (${ref.split(' - ')[0]}).`);
@@ -439,6 +450,40 @@ export default function App() {
       return { node: prev.node, data: generated };
     });
   }, [flashStatus]);
+
+  const handleIntegrateCollection = useCallback(
+    (collectionNode: WorkflowTreeNode) => {
+      if (
+        isNodeLockedOrWithinLockedAncestor(workflowTrees, collectionNode.id) ||
+        collectionNode.locked
+      ) {
+        flashStatus('Action bloquée : cette collection est verrouillée par code PIN.');
+        return;
+      }
+      const latestNode = findNodeById(workflowTrees, collectionNode.id) ?? collectionNode;
+      const docs = collectDocumentsInNode(latestNode);
+      const generated = generateCollectionDataJson(latestNode.id, latestNode.label, docs);
+      setOpenedWordDoc(null);
+      setIntegratedDataDoc(null);
+      setIntegratedCollectionDoc({ node: latestNode, data: generated });
+      setHighlightedNodeId(latestNode.id);
+      flashStatus(
+        `Collection intégrée : « ${latestNode.label} » (${docs.length} document(s), ${generated.tablesConsolidees.length} table(s) consolidée(s)).`
+      );
+    },
+    [workflowTrees, flashStatus]
+  );
+
+  const handleRegenerateIntegratedCollection = useCallback(() => {
+    setIntegratedCollectionDoc((prev) => {
+      if (!prev) return null;
+      const latestNode = findNodeById(workflowTrees, prev.node.id) ?? prev.node;
+      const docs = collectDocumentsInNode(latestNode);
+      const generated = generateCollectionDataJson(latestNode.id, latestNode.label, docs);
+      flashStatus(`Données de la collection « ${latestNode.label} » régénérées.`);
+      return { node: latestNode, data: generated };
+    });
+  }, [workflowTrees, flashStatus]);
 
   const handleOpenDocumentInChat = useCallback(
     (docNode: WorkflowTreeNode) => {
@@ -681,9 +726,103 @@ export default function App() {
       setClipboardIds((prev) => prev.filter((id) => !targetIds.has(id)));
       setOpenedWordDoc((prev) => (prev && targetIds.has(prev.id) ? null : prev));
       setIntegratedDataDoc((prev) => (prev && targetIds.has(prev.node.id) ? null : prev));
+      setIntegratedCollectionDoc((prev) => (prev && targetIds.has(prev.node.id) ? null : prev));
       flashStatus('Élément(s) supprimé(s) de la vue.');
     },
     [workflowTrees, wfCheckedIds, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleExportCollectionArchive = useCallback(
+    async (collectionNode: WorkflowTreeNode) => {
+      const target = findNodeById(workflowTrees, collectionNode.id) ?? collectionNode;
+      if (hasLockedNodeInIds(workflowTrees, [target.id])) {
+        flashStatus('Export collection bloqué : déverrouillez d’abord cette collection.');
+        return;
+      }
+      try {
+        const { blob, filename } = await buildArchiveZipBlob([target], wordBodies, {
+          client: session.client,
+          email: session.email,
+          signature: session.userSignature,
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        flashStatus(`Collection « ${target.label} » exportée dans les téléchargements : ${filename}`);
+      } catch {
+        flashStatus("Erreur lors de l'export de la collection.");
+      }
+    },
+    [workflowTrees, wordBodies, session.client, session.email, session.userSignature, flashStatus]
+  );
+
+  const handleMergeCollections = useCallback(
+    (sourceCollectionId: string, targetCollectionId: string, removeSource = true) => {
+      const res = mergeCollectionsInTree(
+        workflowTrees,
+        sourceCollectionId,
+        targetCollectionId,
+        session.userSignature,
+        wordBodies,
+        removeSource
+      );
+      if (res.error) {
+        flashStatus(res.error);
+        return;
+      }
+      pushUndoSnapshot('Fusion de collections');
+      setWorkflowTrees(res.trees);
+      if (Object.keys(res.copiedWordBodies).length > 0) {
+        setWordBodies((prev) => ({ ...prev, ...res.copiedWordBodies }));
+      }
+      setWfExpandedIds((prev) => {
+        const next = new Set(prev);
+        const path = findNodePath(res.trees, targetCollectionId);
+        path?.forEach((p) => next.add(p.id));
+        next.add(targetCollectionId);
+        return next;
+      });
+      setHighlightedNodeId(targetCollectionId);
+      flashStatus(`Collections fusionnées (${res.mergedItemsCount} élément(s) regroupé(s)).`);
+    },
+    [workflowTrees, wordBodies, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleAddExistingToCollection = useCallback(
+    (sourceIds: string[], targetCollectionId: string) => {
+      const res = addExistingNodesToCollection(
+        workflowTrees,
+        sourceIds,
+        targetCollectionId,
+        wordBodies,
+        session.userSignature
+      );
+      if (res.error) {
+        flashStatus(res.error);
+        return;
+      }
+      pushUndoSnapshot('Ajout dans collection');
+      setWorkflowTrees(res.trees);
+      if (Object.keys(res.copiedWordBodies).length > 0) {
+        setWordBodies((prev) => ({ ...prev, ...res.copiedWordBodies }));
+      }
+      setWfExpandedIds((prev) => {
+        const next = new Set(prev);
+        const path = findNodePath(res.trees, targetCollectionId);
+        path?.forEach((p) => next.add(p.id));
+        next.add(targetCollectionId);
+        return next;
+      });
+      setWfCheckedIds(new Set());
+      setHighlightedNodeId(targetCollectionId);
+      flashStatus(`${res.addedCount} élément(s) ajouté(s) dans la collection.`);
+    },
+    [workflowTrees, wordBodies, session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
   const handleRenameNode = useCallback(
@@ -776,6 +915,9 @@ export default function App() {
           opened && isNodeLockedOrWithinLockedAncestor(nextTrees, opened.id) ? null : opened
         );
         setIntegratedDataDoc((opened) =>
+          opened && isNodeLockedOrWithinLockedAncestor(nextTrees, opened.node.id) ? null : opened
+        );
+        setIntegratedCollectionDoc((opened) =>
           opened && isNodeLockedOrWithinLockedAncestor(nextTrees, opened.node.id) ? null : opened
         );
         return nextTrees;
@@ -1027,7 +1169,7 @@ export default function App() {
     (
       targetId: string,
       label: string,
-      kind: 'document' | 'section' | 'sous-section' | 'exercice' | 'sub-exercice'
+      kind: 'document' | 'section' | 'sous-section' | 'exercice' | 'sub-exercice' | 'collection'
     ) => {
       if (!targetId) return;
       const effectiveTargetId =
@@ -1068,7 +1210,11 @@ export default function App() {
         return next;
       });
       setHighlightedNodeId(newChild.id);
-      flashStatus(`Ajouté en dernière position : « ${label} ».`);
+      flashStatus(
+        nodeType === 'collection'
+          ? `Collection documentaire créée : « ${label} ».`
+          : `Ajouté en dernière position : « ${label} ».`
+      );
     },
     [workflowTrees, session.userSignature, session.email, pushUndoSnapshot, flashStatus]
   );
@@ -1324,6 +1470,48 @@ export default function App() {
       setHighlightedNodeId(targetId);
     },
     [workflowTrees]
+  );
+
+  const handleNavigateCrossRef = useCallback(
+    (targetId: string) => {
+      const targetNode = findNodeById(workflowTrees, targetId);
+      if (!targetNode) {
+        flashStatus('Élément référencé introuvable dans l’arborescence.');
+        return;
+      }
+      const path = findNodePath(workflowTrees, targetId);
+      if (path) {
+        setWfExpandedIds((prev) => {
+          const next = new Set(prev);
+          path.forEach((p) => next.add(p.id));
+          return next;
+        });
+      }
+      setHighlightedNodeId(targetNode.id);
+      if (targetNode.nodeType !== 'root') {
+        setWfCheckedIds(new Set([targetNode.id]));
+      }
+      const locked =
+        isNodeLockedOrWithinLockedAncestor(workflowTrees, targetNode.id) ||
+        Boolean(targetNode.locked);
+      if (locked) {
+        flashStatus(
+          `Référence croisée sélectionnée : « ${targetNode.label} » (verrouillé par code PIN).`
+        );
+        return;
+      }
+      if (targetNode.nodeType !== 'root') {
+        setIntegratedDataDoc(null);
+        setIntegratedCollectionDoc(null);
+        setOpenedWordDoc(targetNode);
+        flashStatus(
+          `Cross-référence ouverte : « ${targetNode.label} » (sélectionné et affiché).`
+        );
+      } else {
+        flashStatus(`Cross-référence affichée : « ${targetNode.label} ».`);
+      }
+    },
+    [workflowTrees, flashStatus]
   );
 
   const handleInitClient = useCallback(() => {
@@ -1638,6 +1826,13 @@ export default function App() {
         onIntegrateData={handleIntegrateData}
         onRegenerateIntegratedData={handleRegenerateIntegratedData}
         onCloseIntegratedData={() => setIntegratedDataDoc(null)}
+        integratedCollectionDoc={integratedCollectionDoc}
+        onIntegrateCollection={handleIntegrateCollection}
+        onRegenerateIntegratedCollection={handleRegenerateIntegratedCollection}
+        onCloseIntegratedCollection={() => setIntegratedCollectionDoc(null)}
+        onExportCollectionArchive={handleExportCollectionArchive}
+        onMergeCollections={handleMergeCollections}
+        onAddExistingToCollection={handleAddExistingToCollection}
         onOpenDocumentInChat={handleOpenDocumentInChat}
         onDownloadNodes={handleDownloadNodes}
         onExportArchive={handleExportArchive}
@@ -1672,6 +1867,7 @@ export default function App() {
         onRemoveCrossRef={handleRemoveCrossRef}
         onAssignNodes={handleAssignNodes}
         onJumpToNode={handleJumpToNode}
+        onNavigateCrossRef={handleNavigateCrossRef}
       />
     </div>
   );

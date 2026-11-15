@@ -836,7 +836,11 @@ function moveSingleNodeByDirection(
     };
   }
 
-  if (prevSibling.nodeType === 'document' && node.nodeType !== 'document') {
+  if (
+    prevSibling.nodeType === 'document' &&
+    node.nodeType !== 'document' &&
+    node.nodeType !== 'collection'
+  ) {
     return {
       trees: nodes,
       moved: false,
@@ -1454,6 +1458,28 @@ export function removeCrossReferenceFromNode(
   });
 }
 
+export function buildParentCrossRefMap(
+  nodes: WorkflowTreeNode[]
+): Map<string, WorkflowTreeNode[]> {
+  const map = new Map<string, WorkflowTreeNode[]>();
+  const walk = (items: WorkflowTreeNode[]) => {
+    for (const n of items) {
+      if (n.crossRefs && n.crossRefs.length > 0) {
+        for (const targetId of n.crossRefs) {
+          const existing = map.get(targetId) || [];
+          if (!existing.some((p) => p.id === n.id)) {
+            existing.push(n);
+            map.set(targetId, existing);
+          }
+        }
+      }
+      if (n.children?.length) walk(n.children);
+    }
+  };
+  walk(nodes);
+  return map;
+}
+
 export function assignNodesInTree(
   nodes: WorkflowTreeNode[],
   targetIds: Set<string>,
@@ -1642,4 +1668,226 @@ export function runAuditReadinessCheck(
     isReady: findings.length === 0 && stats.total > 0,
   };
 }
+
+export function collectDocumentsInNode(node: WorkflowTreeNode): WorkflowTreeNode[] {
+  const docs: WorkflowTreeNode[] = [];
+  const walk = (n: WorkflowTreeNode) => {
+    if (n.nodeType === 'document') {
+      docs.push(n);
+    }
+    n.children?.forEach(walk);
+  };
+  walk(node);
+  return docs;
+}
+
+export function countDocumentsInNode(node: WorkflowTreeNode): number {
+  let count = 0;
+  const walk = (n: WorkflowTreeNode) => {
+    if (n.nodeType === 'document') count += 1;
+    n.children?.forEach(walk);
+  };
+  walk(node);
+  return count;
+}
+
+export function collectAllCollections(nodes: WorkflowTreeNode[]): WorkflowTreeNode[] {
+  const list: WorkflowTreeNode[] = [];
+  const walk = (items: WorkflowTreeNode[]) => {
+    for (const n of items) {
+      if (n.nodeType === 'collection') {
+        list.push(n);
+      }
+      if (n.children?.length) walk(n.children);
+    }
+  };
+  walk(nodes);
+  return list;
+}
+
+function cloneNodeMappingBodies(
+  node: WorkflowTreeNode,
+  sourceWordBodies: Record<string, string>,
+  copiedBodies: Record<string, string>
+): WorkflowTreeNode {
+  const cloned = cloneNodeWithFreshIds(node);
+  const mapWalk = (orig: WorkflowTreeNode, copy: WorkflowTreeNode) => {
+    if (sourceWordBodies[orig.id]) {
+      copiedBodies[copy.id] = sourceWordBodies[orig.id];
+    }
+    if (orig.children?.length && copy.children?.length) {
+      orig.children.forEach((origChild, idx) => {
+        const copyChild = copy.children![idx];
+        if (copyChild) mapWalk(origChild, copyChild);
+      });
+    }
+  };
+  mapWalk(node, cloned);
+  return cloned;
+}
+
+export function mergeCollectionsInTree(
+  nodes: WorkflowTreeNode[],
+  sourceCollectionId: string,
+  targetCollectionId: string,
+  actor: string,
+  wordBodies: Record<string, string> = {},
+  removeSource = true
+): {
+  trees: WorkflowTreeNode[];
+  mergedItemsCount: number;
+  copiedWordBodies: Record<string, string>;
+  error?: string;
+} {
+  if (!sourceCollectionId || !targetCollectionId || sourceCollectionId === targetCollectionId) {
+    return {
+      trees: nodes,
+      mergedItemsCount: 0,
+      copiedWordBodies: {},
+      error: 'Sélectionnez deux collections différentes à fusionner.',
+    };
+  }
+
+  const sourceCol = findNodeById(nodes, sourceCollectionId);
+  const targetCol = findNodeById(nodes, targetCollectionId);
+  if (!sourceCol || sourceCol.nodeType !== 'collection' || !targetCol || targetCol.nodeType !== 'collection') {
+    return {
+      trees: nodes,
+      mergedItemsCount: 0,
+      copiedWordBodies: {},
+      error: 'Les deux éléments sélectionnés doivent être des collections documentaires.',
+    };
+  }
+
+  if (hasLockedNodeInIds(nodes, [sourceCollectionId, targetCollectionId])) {
+    return {
+      trees: nodes,
+      mergedItemsCount: 0,
+      copiedWordBodies: {},
+      error: 'Fusion bloquée : l’une des collections (ou un sous-élément) est verrouillée par code PIN.',
+    };
+  }
+
+  if (isDescendantOrSelf(nodes, sourceCollectionId, targetCollectionId)) {
+    return {
+      trees: nodes,
+      mergedItemsCount: 0,
+      copiedWordBodies: {},
+      error: 'Impossible de fusionner une collection parente dans sa propre sous-collection.',
+    };
+  }
+
+  const sourceChildren = sourceCol.children || [];
+  const copiedWordBodies: Record<string, string> = {};
+  const itemsToAppend = removeSource
+    ? sourceChildren
+    : sourceChildren.map((child) => cloneNodeMappingBodies(child, wordBodies, copiedWordBodies));
+
+  let updated = nodes;
+  if (removeSource) {
+    updated = deleteNodesInTree(updated, new Set([sourceCollectionId]));
+  }
+
+  for (const item of itemsToAppend) {
+    updated = addChildNodeToTarget(updated, targetCollectionId, item);
+  }
+
+  updated = appendAuditTrailToNodes(
+    updated,
+    new Set([targetCollectionId]),
+    actor,
+    'Fusion de collection',
+    `${sourceCol.label} (${itemsToAppend.length} élément(s))`
+  );
+
+  return {
+    trees: updated,
+    mergedItemsCount: itemsToAppend.length,
+    copiedWordBodies,
+  };
+}
+
+export function addExistingNodesToCollection(
+  nodes: WorkflowTreeNode[],
+  sourceIds: string[],
+  targetCollectionId: string,
+  wordBodies: Record<string, string>,
+  actor: string
+): {
+  trees: WorkflowTreeNode[];
+  addedCount: number;
+  copiedWordBodies: Record<string, string>;
+  error?: string;
+} {
+  const targetCol = findNodeById(nodes, targetCollectionId);
+  if (!targetCol || targetCol.nodeType !== 'collection') {
+    return {
+      trees: nodes,
+      addedCount: 0,
+      copiedWordBodies: {},
+      error: 'La destination doit être une collection documentaire.',
+    };
+  }
+
+  if (isNodeLockedOrWithinLockedAncestor(nodes, targetCollectionId)) {
+    return {
+      trees: nodes,
+      addedCount: 0,
+      copiedWordBodies: {},
+      error: 'Collection verrouillée : déverrouillez-la avant d’y ajouter des éléments.',
+    };
+  }
+
+  const validSourceIds = sourceIds.filter((sid) => {
+    const src = findNodeById(nodes, sid);
+    if (!src || src.nodeType === 'root') return false;
+    if (isDescendantOrSelf(nodes, sid, targetCollectionId)) return false;
+    return true;
+  });
+
+  if (validSourceIds.length === 0) {
+    return {
+      trees: nodes,
+      addedCount: 0,
+      copiedWordBodies: {},
+      error: 'Aucun élément valide à ajouter dans cette collection.',
+    };
+  }
+
+  if (hasLockedNodeInIds(nodes, validSourceIds)) {
+    return {
+      trees: nodes,
+      addedCount: 0,
+      copiedWordBodies: {},
+      error: 'Ajout bloqué : un des éléments sélectionnés est verrouillé par code PIN.',
+    };
+  }
+
+  const copiedWordBodies: Record<string, string> = {};
+  let updated = nodes;
+  let addedCount = 0;
+
+  for (const sid of validSourceIds) {
+    const src = findNodeById(nodes, sid);
+    if (!src) continue;
+    const cloned = cloneNodeMappingBodies(src, wordBodies, copiedWordBodies);
+    updated = addChildNodeToTarget(updated, targetCollectionId, cloned);
+    addedCount += 1;
+  }
+
+  updated = appendAuditTrailToNodes(
+    updated,
+    new Set([targetCollectionId]),
+    actor,
+    'Ajout dans collection',
+    `${addedCount} élément(s) regroupé(s)`
+  );
+
+  return {
+    trees: updated,
+    addedCount,
+    copiedWordBodies,
+  };
+}
+
 

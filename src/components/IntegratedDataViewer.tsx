@@ -9,20 +9,28 @@ import {
   Table2,
   X,
 } from 'lucide-react';
-import { FeuilleCouvertureDocument } from '../data/feuilleCouvertureTemplates';
+import {
+  FeuilleCouvertureDocument,
+  IntegratedCollectionDocument,
+} from '../data/feuilleCouvertureTemplates';
 import { WorkflowTreeNode } from '../types/workflow';
 
 interface IntegratedDataViewerProps {
-  docNode: WorkflowTreeNode;
-  data: FeuilleCouvertureDocument;
+  docNode?: WorkflowTreeNode;
+  data?: FeuilleCouvertureDocument;
+  collectionDoc?: {
+    node: WorkflowTreeNode;
+    data: IntegratedCollectionDocument;
+  };
   onRegenerate: () => void;
-  onSendToChat: (docNode: WorkflowTreeNode) => void;
+  onSendToChat: (node: WorkflowTreeNode) => void;
   onClose: () => void;
 }
 
 export const IntegratedDataViewer: React.FC<IntegratedDataViewerProps> = ({
   docNode,
   data,
+  collectionDoc,
   onRegenerate,
   onSendToChat,
   onClose,
@@ -30,13 +38,28 @@ export const IntegratedDataViewer: React.FC<IntegratedDataViewerProps> = ({
   const [viewMode, setViewMode] = useState<'table' | 'json'>('table');
   const [copied, setCopied] = useState(false);
 
-  const tables = data['Etape mission - Feuille couverture'] || [];
-  const prettyJson = useMemo(() => JSON.stringify(data, null, 2), [data]);
+  const isCollectionMode = Boolean(collectionDoc);
+  const activeNode = collectionDoc?.node ?? docNode;
+  const payload = collectionDoc ? collectionDoc.data : data;
+
+  const tables = useMemo(() => {
+    if (collectionDoc) {
+      return collectionDoc.data.tablesConsolidees || [];
+    }
+    return data?.['Etape mission - Feuille couverture'] || [];
+  }, [collectionDoc, data]);
+
+  const prettyJson = useMemo(() => JSON.stringify(payload ?? {}, null, 2), [payload]);
 
   const refSummary = useMemo(() => {
+    if (collectionDoc) {
+      return `${collectionDoc.data.documentCount} document(s) · ${tables.length} table(s) consolidée(s)`;
+    }
     const t1 = tables.find((entry) => 'table 1' in entry)?.['table 1']?.[0];
     return t1?.Reference || 'Feuille couverture';
-  }, [tables]);
+  }, [collectionDoc, tables]);
+
+  if (!activeNode || !payload) return null;
 
   const handleCopyJson = async () => {
     try {
@@ -53,7 +76,7 @@ export const IntegratedDataViewer: React.FC<IntegratedDataViewerProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${docNode.label.replace(/[^a-zA-Z0-9_-]+/g, '_')}.json`;
+    a.download = `${activeNode.label.replace(/[^a-zA-Z0-9_-]+/g, '_')}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -62,18 +85,28 @@ export const IntegratedDataViewer: React.FC<IntegratedDataViewerProps> = ({
 
   return (
     <div
-      aria-label={`Intégrer data : ${docNode.label}`}
+      aria-label={
+        isCollectionMode
+          ? `Intégrer collection : ${activeNode.label}`
+          : `Intégrer data : ${activeNode.label}`
+      }
       className="flex min-h-0 flex-1 flex-col border-b border-slate-700 bg-slate-950 p-3 lg:border-b-0 lg:border-r lg:border-slate-800 lg:p-4"
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-700 bg-white text-slate-900 shadow-lg">
-        {/* Barre titre façon fenêtre document / data */}
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 bg-emerald-700 px-3 py-1.5 text-xs text-white">
+        {/* Barre titre façon fenêtre document / data / collection */}
+        <div
+          className={`flex shrink-0 flex-wrap items-center justify-between gap-2 px-3 py-1.5 text-xs text-white ${
+            isCollectionMode ? 'bg-violet-700' : 'bg-emerald-700'
+          }`}
+        >
           <div className="flex min-w-0 items-center gap-2">
             <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white/15">
               <Database className="h-3.5 w-3.5" aria-hidden="true" />
             </span>
-            <span className="truncate font-medium" title={docNode.label}>
-              Data · {docNode.label}
+            <span className="truncate font-medium" title={activeNode.label}>
+              {isCollectionMode
+                ? `Collection Data · ${activeNode.label} (${collectionDoc!.data.documentCount} doc)`
+                : `Data · ${activeNode.label}`}
             </span>
           </div>
 
@@ -114,7 +147,7 @@ export const IntegratedDataViewer: React.FC<IntegratedDataViewerProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => onSendToChat(docNode)}
+              onClick={() => onSendToChat(activeNode)}
               className="rounded bg-white/15 px-2 py-0.5 text-[11px] font-medium hover:bg-white/25 cursor-pointer"
             >
               Envoyer au chat
@@ -122,7 +155,11 @@ export const IntegratedDataViewer: React.FC<IntegratedDataViewerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              aria-label="Fermer l'interface Intégrer data"
+              aria-label={
+                isCollectionMode
+                  ? "Fermer l'interface Intégrer collection"
+                  : "Fermer l'interface Intégrer data"
+              }
               className="rounded p-0.5 hover:bg-white/20 cursor-pointer"
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -138,12 +175,16 @@ export const IntegratedDataViewer: React.FC<IntegratedDataViewerProps> = ({
               onClick={() => setViewMode('table')}
               className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium cursor-pointer ${
                 viewMode === 'table'
-                  ? 'bg-emerald-700 text-white'
+                  ? isCollectionMode
+                    ? 'bg-violet-700 text-white'
+                    : 'bg-emerald-700 text-white'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Table2 className="h-3 w-3" aria-hidden="true" />
-              <span>Feuille couverture</span>
+              <span>
+                {isCollectionMode ? 'Tables consolidées' : 'Feuille couverture'}
+              </span>
             </button>
             <button
               type="button"
@@ -170,6 +211,12 @@ export const IntegratedDataViewer: React.FC<IntegratedDataViewerProps> = ({
             <pre className="overflow-x-auto rounded-md border border-slate-800 bg-slate-950 p-3 font-mono text-[11px] leading-relaxed text-emerald-300">
               <code>{prettyJson}</code>
             </pre>
+          ) : tables.length === 0 ? (
+            <div className="rounded-md border border-dashed border-slate-300 bg-white p-6 text-center text-xs text-slate-500">
+              {isCollectionMode
+                ? 'Cette collection ne contient aucun document pour le moment. Ajoutez ou importez des documents pour consolider leurs tables.'
+                : 'Aucune table disponible pour ce document.'}
+            </div>
           ) : (
             <div className="space-y-3">
               {tables.map((tableObj, tableIdx) => {

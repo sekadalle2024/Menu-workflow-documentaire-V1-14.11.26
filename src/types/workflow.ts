@@ -18,6 +18,7 @@ export type WorkflowNodeType =
   | 'section'
   | 'sous-section'
   | 'signature'
+  | 'collection'
   | 'document';
 
 export type WorkflowNodeStatus = 'todo' | 'in-progress' | 'in-review' | 'validated';

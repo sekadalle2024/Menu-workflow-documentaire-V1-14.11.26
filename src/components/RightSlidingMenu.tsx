@@ -2,10 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   ArrowDown,
+  ArrowDownRight,
   ArrowLeft,
   ArrowRight,
   ArrowRightLeft,
   ArrowUp,
+  BarChart3,
   Check,
   ChevronDown,
   ChevronRight,
@@ -15,6 +17,7 @@ import {
   ClipboardCopy,
   ClipboardList,
   CopyPlus,
+  CornerLeftUp,
   Database,
   Dices,
   Download,
@@ -26,6 +29,7 @@ import {
   FileText,
   History,
   KeyRound,
+  Layers,
   Link2,
   Lock,
   MessageSquarePlus,
@@ -48,7 +52,10 @@ import {
   X,
 } from 'lucide-react';
 import { WORKFLOW_SIDEBAR_ITEMS } from '../data/workflowCatalog';
-import { FeuilleCouvertureDocument } from '../data/feuilleCouvertureTemplates';
+import {
+  FeuilleCouvertureDocument,
+  IntegratedCollectionDocument,
+} from '../data/feuilleCouvertureTemplates';
 import {
   ClientSessionConfig,
   WorkflowNatureId,
@@ -57,7 +64,11 @@ import {
 } from '../types/workflow';
 import {
   AuditReadinessReport,
+  buildParentCrossRefMap,
+  collectAllCollections,
   collectAllNodesList,
+  countDocumentsInNode,
+  findNodePath,
   generateRandomAuditDocumentName,
   getWorkflowCheckState,
   hasLockedNodeInIds,
@@ -71,6 +82,7 @@ import {
   NodeInspectorState,
   WorkflowNodeInspector,
 } from './WorkflowNodeInspector';
+import { AuditStatsDashboard } from './AuditStatsDashboard';
 
 interface TriCheckboxProps {
   state: 'checked' | 'unchecked' | 'indeterminate';
@@ -144,6 +156,20 @@ interface RightSlidingMenuProps {
   onIntegrateData: (node: WorkflowTreeNode) => void;
   onRegenerateIntegratedData: () => void;
   onCloseIntegratedData: () => void;
+  integratedCollectionDoc: {
+    node: WorkflowTreeNode;
+    data: IntegratedCollectionDocument;
+  } | null;
+  onIntegrateCollection: (node: WorkflowTreeNode) => void;
+  onRegenerateIntegratedCollection: () => void;
+  onCloseIntegratedCollection: () => void;
+  onExportCollectionArchive: (node: WorkflowTreeNode) => void;
+  onMergeCollections: (
+    sourceCollectionId: string,
+    targetCollectionId: string,
+    removeSource?: boolean
+  ) => void;
+  onAddExistingToCollection: (sourceIds: string[], targetCollectionId: string) => void;
   onOpenDocumentInChat: (node: WorkflowTreeNode) => void;
   onDownloadNodes: (fallbackNodeId?: string) => void;
   onExportArchive: (fallbackNodeId?: string) => void;
@@ -155,7 +181,7 @@ interface RightSlidingMenuProps {
   onAddChildToNode: (
     targetId: string,
     label: string,
-    kind: 'document' | 'section' | 'sous-section' | 'exercice' | 'sub-exercice'
+    kind: 'document' | 'section' | 'sous-section' | 'exercice' | 'sub-exercice' | 'collection'
   ) => void;
   onAddRandomDocument: (targetId: string) => void;
   onAddBlankWorkflow: (targetNodeId?: string) => void;
@@ -182,6 +208,7 @@ interface RightSlidingMenuProps {
   onRemoveCrossRef: (sourceId: string, targetRefId: string) => void;
   onAssignNodes: (targetIds: string[], assignee: string, dueDate: string) => void;
   onJumpToNode: (targetId: string) => void;
+  onNavigateCrossRef: (targetId: string) => void;
 }
 
 function nodeMatchesSearch(node: WorkflowTreeNode, query: string): boolean {
@@ -230,6 +257,13 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   onIntegrateData,
   onRegenerateIntegratedData,
   onCloseIntegratedData,
+  integratedCollectionDoc,
+  onIntegrateCollection,
+  onRegenerateIntegratedCollection,
+  onCloseIntegratedCollection,
+  onExportCollectionArchive,
+  onMergeCollections,
+  onAddExistingToCollection,
   onOpenDocumentInChat,
   onDownloadNodes,
   onExportArchive,
@@ -264,9 +298,11 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   onRemoveCrossRef,
   onAssignNodes,
   onJumpToNode,
+  onNavigateCrossRef,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showApiPanel, setShowApiPanel] = useState(false);
+  const [showStatsDashboard, setShowStatsDashboard] = useState(false);
   const [userKeyDraft, setUserKeyDraft] = useState(session.userApiKey);
   const [teamKeyDraft, setTeamKeyDraft] = useState(session.teamApiKey);
   const [sigDraft, setSigDraft] = useState(session.userSignature);
@@ -277,9 +313,36 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   const [addingTarget, setAddingTarget] = useState<{
     targetId: string;
     targetLabel: string;
-    kind: 'document' | 'section' | 'sous-section' | 'exercice' | 'sub-exercice';
+    kind: 'document' | 'section' | 'sous-section' | 'exercice' | 'sub-exercice' | 'collection';
   } | null>(null);
   const [addLabelDraft, setAddLabelDraft] = useState('');
+
+  const [mergeCollectionPrompt, setMergeCollectionPrompt] = useState<{
+    sourceId: string;
+    sourceLabel: string;
+    targetId: string;
+    removeSource: boolean;
+  } | null>(null);
+
+  const [addToCollectionPrompt, setAddToCollectionPrompt] = useState<{
+    collectionId: string;
+    collectionLabel: string;
+    selectedIds: string[];
+    filterText: string;
+  } | null>(null);
+
+  const [collectionPickerPrompt, setCollectionPickerPrompt] = useState<{
+    action:
+      | 'merge'
+      | 'duplicate'
+      | 'integrate'
+      | 'export'
+      | 'import-file'
+      | 'import-dir'
+      | 'delete';
+    actionLabel: string;
+    selectedCollectionId: string;
+  } | null>(null);
 
   const [pinPrompt, setPinPrompt] = useState<{
     mode: 'lock' | 'unlock';
@@ -351,6 +414,12 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
       if (e.key === 'Escape') {
         if (contextMenu) {
           setContextMenu(null);
+        } else if (collectionPickerPrompt) {
+          setCollectionPickerPrompt(null);
+        } else if (mergeCollectionPrompt) {
+          setMergeCollectionPrompt(null);
+        } else if (addToCollectionPrompt) {
+          setAddToCollectionPrompt(null);
         } else if (pinPrompt) {
           setPinPrompt(null);
         } else if (renamingId) {
@@ -384,6 +453,9 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     onClose,
     renamingId,
     addingTarget,
+    collectionPickerPrompt,
+    mergeCollectionPrompt,
+    addToCollectionPrompt,
     contextMenu,
     pinPrompt,
     inspector,
@@ -421,6 +493,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     [trees, checkedNonRootNodes]
   );
 
+  const parentCrossRefMap = useMemo(() => buildParentCrossRefMap(trees), [trees]);
+
   const effectiveTransferCount =
     activatedSourceIds.length > 0 ? activatedSourceIds.length : checkedNonRootNodes.length;
 
@@ -428,7 +502,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
 
   const openContextMenuAt = (x: number, y: number, node: WorkflowTreeNode | null) => {
     const menuWidth = 288;
-    const menuHeight = node ? 580 : 190;
+    const menuHeight = node ? 640 : 420;
     const clampedX = Math.min(x, window.innerWidth - menuWidth - 12);
     const clampedY = Math.min(y, window.innerHeight - menuHeight - 12);
     setShowNatureSubmenu(false);
@@ -520,6 +594,9 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
       if (node.nodeType === 'signature') {
         return null;
       }
+      if (node.nodeType === 'collection') {
+        return <Layers className="h-4 w-4 shrink-0 text-violet-400" aria-hidden="true" />;
+      }
       if (node.nodeType === 'document') {
         return <FileText className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />;
       }
@@ -529,6 +606,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
         <Folder className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />
       );
     };
+    const collectionDocCount =
+      node.nodeType === 'collection' ? countDocumentsInNode(node) : 0;
 
     return (
       <div key={node.id} className="select-none">
@@ -670,6 +749,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                     ? 'font-display font-semibold text-white'
                     : node.nodeType === 'exercice'
                     ? 'font-display font-semibold text-blue-200'
+                    : node.nodeType === 'collection'
+                    ? 'font-medium text-violet-200'
                     : node.nodeType === 'nature'
                     ? 'font-medium text-slate-100'
                     : node.nodeType === 'signature'
@@ -680,6 +761,14 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
               >
                 {node.nodeType === 'signature' ? `[${node.label}]` : node.label}
               </span>
+              {node.nodeType === 'collection' && (
+                <span
+                  title={`${collectionDocCount} document(s) dans cette collection`}
+                  className="shrink-0 rounded border border-violet-600/60 bg-violet-950/90 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-violet-200 tabular-nums"
+                >
+                  {collectionDocCount} doc
+                </span>
+              )}
               {node.status && (
                 <span
                   title={`Statut : ${WORKFLOW_STATUS_LABELS[node.status]}`}
@@ -731,21 +820,6 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                   </span>
                 );
               })()}
-              {node.crossRefs && node.crossRefs.length > 0 && (
-                <span
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setInspector({ mode: 'crossrefs', nodeId: node.id });
-                  }}
-                  title={`${node.crossRefs.length} référence(s) croisée(s)`}
-                  className="inline-flex shrink-0 items-center gap-0.5 text-indigo-400 hover:text-indigo-300"
-                >
-                  <Link2 className="h-3 w-3" aria-hidden="true" />
-                  <span className="font-mono text-[10px] tabular-nums">
-                    {node.crossRefs.length}
-                  </span>
-                </span>
-              )}
               {node.managerReviewed && (
                 <span
                   title="Revue manager effectuée"
@@ -764,6 +838,64 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
               )}
             </button>
           )}
+
+          {/* Bouton Parent -> Enfants (Indigo : aller vers références enfants) */}
+          {!isRenaming && node.crossRefs && node.crossRefs.length > 0 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (node.crossRefs!.length === 1) {
+                  onNavigateCrossRef(node.crossRefs![0]);
+                } else {
+                  setInspector({ mode: 'crossrefs', nodeId: node.id });
+                }
+              }}
+              title={
+                node.crossRefs.length === 1
+                  ? 'Cross-référence enfant : cliquer pour sélectionner et ouvrir le document'
+                  : `${node.crossRefs.length} références enfants : cliquer pour choisir et ouvrir`
+              }
+              aria-label={`Aller vers référence enfant (${node.crossRefs.length})`}
+              className="inline-flex shrink-0 items-center gap-0.5 rounded border border-indigo-700/70 bg-indigo-950/70 px-1.5 py-0.5 text-indigo-300 hover:bg-indigo-900/80 hover:text-white cursor-pointer"
+            >
+              <Link2 className="h-3 w-3 text-indigo-400" aria-hidden="true" />
+              <ArrowDownRight className="h-3 w-3 text-indigo-400" aria-hidden="true" />
+              <span className="font-mono text-[10px] font-semibold tabular-nums">
+                {node.crossRefs.length}
+              </span>
+            </button>
+          )}
+
+          {/* Bouton Enfant -> Parents identifiés (Cyan + CornerLeftUp : couleur & icône différentes) */}
+          {!isRenaming &&
+            (() => {
+              const parentRefs = parentCrossRefMap.get(node.id) || [];
+              if (parentRefs.length === 0) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (parentRefs.length === 1) {
+                      onNavigateCrossRef(parentRefs[0].id);
+                    } else {
+                      setInspector({ mode: 'crossrefs', nodeId: node.id });
+                    }
+                  }}
+                  title={`Parent(s) référent(s) : ${parentRefs
+                    .map((p) => p.label)
+                    .join(', ')} — cliquer pour sélectionner et ouvrir le parent`}
+                  aria-label={`Aller vers le parent référent (${parentRefs.length})`}
+                  className="inline-flex shrink-0 items-center gap-0.5 rounded border border-cyan-600/70 bg-cyan-950/75 px-1.5 py-0.5 text-cyan-200 hover:bg-cyan-900/80 hover:text-white cursor-pointer"
+                >
+                  <CornerLeftUp className="h-3 w-3 text-cyan-400" aria-hidden="true" />
+                  <span className="font-mono text-[10px] font-semibold tabular-nums">
+                    {parentRefs.length}
+                  </span>
+                </button>
+              );
+            })()}
 
           {!isRenaming && node.nodeType === 'document' && (
             <button
@@ -798,7 +930,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             </button>
           )}
 
-          {!isRenaming && hasChildren && (
+          {!isRenaming && hasChildren && node.nodeType !== 'collection' && (
             <span className="shrink-0 font-mono text-[11px] text-slate-400 tabular-nums">
               {node.children!.length}
             </span>
@@ -861,7 +993,9 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
         aria-label="Menu coulissant — Workflows documentaires"
         aria-hidden={!isOpen}
         className={`fixed top-0 right-0 z-50 flex h-full w-full flex-col border-l border-slate-800 bg-slate-900 text-slate-100 shadow-2xl transition-[transform,max-width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          openedWordDoc || integratedDataDoc ? 'max-w-[1360px]' : 'max-w-[780px]'
+          openedWordDoc || integratedDataDoc || integratedCollectionDoc
+            ? 'max-w-[1360px]'
+            : 'max-w-[780px]'
         } ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
       >
         {/* Header identité & accès API — INCHANGÉ */}
@@ -877,6 +1011,19 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setShowStatsDashboard((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                showStatsDashboard
+                  ? 'border-blue-500 bg-blue-950/70 text-blue-200'
+                  : 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+              }`}
+            >
+              <BarChart3 className="h-3.5 w-3.5 text-blue-400" aria-hidden="true" />
+              <span>Stats &amp; Gantt</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setShowApiPanel((v) => !v)}
@@ -1133,6 +1280,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                       ? 'Ex: Exercice 2027'
                       : addingTarget.kind === 'sub-exercice'
                       ? 'Ex: Clôture T4 / Intérim'
+                      : addingTarget.kind === 'collection'
+                      ? 'Ex: Collection Pièces Justificatives'
                       : addingTarget.kind === 'section'
                       ? 'Ex: Audit conformité'
                       : addingTarget.kind === 'sous-section'
@@ -1158,6 +1307,354 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             </form>
           )}
 
+          {mergeCollectionPrompt && (() => {
+            const allCols = collectAllCollections(trees).filter(
+              (c) => c.id !== mergeCollectionPrompt.sourceId
+            );
+            return (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!mergeCollectionPrompt.targetId) return;
+                  onMergeCollections(
+                    mergeCollectionPrompt.sourceId,
+                    mergeCollectionPrompt.targetId,
+                    mergeCollectionPrompt.removeSource
+                  );
+                  setMergeCollectionPrompt(null);
+                }}
+                className="space-y-2 rounded-md border border-violet-700/70 bg-slate-950/90 p-2.5 text-xs"
+              >
+                <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-violet-300">
+                  <span className="flex items-center gap-1.5 truncate">
+                    <Layers className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate">
+                      Fusionner « {mergeCollectionPrompt.sourceLabel} » vers :
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setMergeCollectionPrompt(null)}
+                    className="text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {allCols.length === 0 ? (
+                  <div className="text-[11px] text-slate-400">
+                    Créez d&apos;abord une autre collection documentaire pour pouvoir les fusionner.
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={mergeCollectionPrompt.targetId}
+                        onChange={(e) =>
+                          setMergeCollectionPrompt({
+                            ...mergeCollectionPrompt,
+                            targetId: e.target.value,
+                          })
+                        }
+                        className="min-w-0 flex-1 rounded border border-violet-600 bg-slate-900 px-2.5 py-1.5 text-xs text-white focus:outline-none"
+                      >
+                        <option value="">Choisir la collection cible...</option>
+                        {allCols.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.label} ({countDocumentsInNode(c)} doc)
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="submit"
+                        disabled={!mergeCollectionPrompt.targetId}
+                        className="rounded bg-violet-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                      >
+                        Fusionner
+                      </button>
+                    </div>
+                    <label className="flex items-center gap-2 text-[11px] text-slate-300 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={mergeCollectionPrompt.removeSource}
+                        onChange={(e) =>
+                          setMergeCollectionPrompt({
+                            ...mergeCollectionPrompt,
+                            removeSource: e.target.checked,
+                          })
+                        }
+                        className="accent-violet-500"
+                      />
+                      <span>Supprimer la collection source après fusion</span>
+                    </label>
+                  </>
+                )}
+              </form>
+            );
+          })()}
+
+          {collectionPickerPrompt && (() => {
+            const allCols = collectAllCollections(trees);
+            const selectedCol =
+              allCols.find((c) => c.id === collectionPickerPrompt.selectedCollectionId) || null;
+            return (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!selectedCol) return;
+                  const act = collectionPickerPrompt.action;
+                  setCollectionPickerPrompt(null);
+                  if (act === 'merge') {
+                    setMergeCollectionPrompt({
+                      sourceId: selectedCol.id,
+                      sourceLabel: selectedCol.label,
+                      targetId: '',
+                      removeSource: true,
+                    });
+                  } else if (act === 'duplicate') {
+                    onDuplicateNodes(selectedCol.id);
+                  } else if (act === 'integrate') {
+                    onIntegrateCollection(selectedCol);
+                  } else if (act === 'export') {
+                    onExportCollectionArchive(selectedCol);
+                  } else if (act === 'import-file') {
+                    importTargetIdRef.current = selectedCol.id;
+                    importInputRef.current?.click();
+                  } else if (act === 'import-dir') {
+                    importTargetIdRef.current = selectedCol.id;
+                    importDirInputRef.current?.click();
+                  } else if (act === 'delete') {
+                    onDeleteNodes(selectedCol.id);
+                  }
+                }}
+                className="space-y-2 rounded-md border border-violet-700/70 bg-slate-950/90 p-2.5 text-xs"
+              >
+                <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-violet-300">
+                  <span className="flex items-center gap-1.5 truncate">
+                    <Layers className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate">
+                      {collectionPickerPrompt.actionLabel} — choisir la collection :
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCollectionPickerPrompt(null)}
+                    className="text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={collectionPickerPrompt.selectedCollectionId}
+                    onChange={(e) =>
+                      setCollectionPickerPrompt({
+                        ...collectionPickerPrompt,
+                        selectedCollectionId: e.target.value,
+                      })
+                    }
+                    className="min-w-0 flex-1 rounded border border-violet-600 bg-slate-900 px-2.5 py-1.5 text-xs text-white focus:outline-none"
+                  >
+                    <option value="">Sélectionner une collection...</option>
+                    {allCols.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.label} ({countDocumentsInNode(c)} doc)
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={!selectedCol}
+                    className="rounded bg-violet-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                  >
+                    Exécuter
+                  </button>
+                </div>
+              </form>
+            );
+          })()}
+
+          {addToCollectionPrompt && (() => {
+            const allCols = collectAllCollections(trees);
+            const q = addToCollectionPrompt.filterText.trim().toLowerCase();
+            const candidateNodes = allVisibleNodes.filter(
+              (n) =>
+                n.nodeType !== 'root' &&
+                n.id !== addToCollectionPrompt.collectionId &&
+                (!q || n.label.toLowerCase().includes(q))
+            );
+            return (
+              <div className="space-y-2 rounded-md border border-violet-700/70 bg-slate-950/90 p-2.5 text-xs">
+                <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-violet-300">
+                  <span className="flex items-center gap-1.5 truncate">
+                    <Layers className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span className="truncate">
+                      Ajouter dans « {addToCollectionPrompt.collectionLabel} »
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAddToCollectionPrompt(null)}
+                    className="text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {allCols.length > 1 && (
+                  <div className="flex items-center gap-2">
+                    <span className="shrink-0 text-[11px] text-slate-400">Collection cible :</span>
+                    <select
+                      value={addToCollectionPrompt.collectionId}
+                      onChange={(e) => {
+                        const found = allCols.find((c) => c.id === e.target.value);
+                        if (!found) return;
+                        setAddToCollectionPrompt({
+                          ...addToCollectionPrompt,
+                          collectionId: found.id,
+                          collectionLabel: found.label,
+                        });
+                      }}
+                      className="min-w-0 flex-1 rounded border border-violet-600 bg-slate-900 px-2 py-1 text-[11px] text-white focus:outline-none"
+                    >
+                      {allCols.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.label} ({countDocumentsInNode(c)} doc)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddingTarget({
+                        targetId: addToCollectionPrompt.collectionId,
+                        targetLabel: addToCollectionPrompt.collectionLabel,
+                        kind: 'document',
+                      });
+                      setAddLabelDraft(generateRandomAuditDocumentName());
+                      setAddToCollectionPrompt(null);
+                    }}
+                    className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-700 cursor-pointer"
+                  >
+                    + Nouveau document
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddingTarget({
+                        targetId: addToCollectionPrompt.collectionId,
+                        targetLabel: addToCollectionPrompt.collectionLabel,
+                        kind: 'section',
+                      });
+                      setAddLabelDraft('');
+                      setAddToCollectionPrompt(null);
+                    }}
+                    className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-700 cursor-pointer"
+                  >
+                    + Section
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddingTarget({
+                        targetId: addToCollectionPrompt.collectionId,
+                        targetLabel: addToCollectionPrompt.collectionLabel,
+                        kind: 'sous-section',
+                      });
+                      setAddLabelDraft('');
+                      setAddToCollectionPrompt(null);
+                    }}
+                    className="rounded border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-700 cursor-pointer"
+                  >
+                    + Sous-section
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddingTarget({
+                        targetId: addToCollectionPrompt.collectionId,
+                        targetLabel: addToCollectionPrompt.collectionLabel,
+                        kind: 'collection',
+                      });
+                      setAddLabelDraft('');
+                      setAddToCollectionPrompt(null);
+                    }}
+                    className="rounded border border-violet-700/70 bg-violet-950/60 px-2 py-1 text-[11px] text-violet-200 hover:bg-violet-900/70 cursor-pointer"
+                  >
+                    + Sous-collection
+                  </button>
+                </div>
+
+                <div className="border-t border-slate-800 pt-2">
+                  <input
+                    type="text"
+                    value={addToCollectionPrompt.filterText}
+                    onChange={(e) =>
+                      setAddToCollectionPrompt({
+                        ...addToCollectionPrompt,
+                        filterText: e.target.value,
+                      })
+                    }
+                    placeholder="Filtrer des éléments existants à copier/regrouper..."
+                    className="mb-1.5 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-white placeholder:text-slate-500 focus:outline-none"
+                  />
+                  <div className="max-h-28 space-y-0.5 overflow-y-auto rounded border border-slate-800 bg-slate-900/60 p-1">
+                    {candidateNodes.slice(0, 40).map((cand) => {
+                      const isSel = addToCollectionPrompt.selectedIds.includes(cand.id);
+                      return (
+                        <label
+                          key={cand.id}
+                          className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-0.5 text-[11px] text-slate-200 hover:bg-slate-800"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSel}
+                            onChange={() => {
+                              setAddToCollectionPrompt((prev) => {
+                                if (!prev) return null;
+                                const exists = prev.selectedIds.includes(cand.id);
+                                return {
+                                  ...prev,
+                                  selectedIds: exists
+                                    ? prev.selectedIds.filter((id) => id !== cand.id)
+                                    : [...prev.selectedIds, cand.id],
+                                };
+                              });
+                            }}
+                            className="accent-violet-500"
+                          />
+                          <span className="truncate flex-1">{cand.label}</span>
+                          <span className="shrink-0 font-mono text-[10px] text-slate-500">
+                            {cand.nodeType}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      disabled={addToCollectionPrompt.selectedIds.length === 0}
+                      onClick={() => {
+                        onAddExistingToCollection(
+                          addToCollectionPrompt.selectedIds,
+                          addToCollectionPrompt.collectionId
+                        );
+                        setAddToCollectionPrompt(null);
+                      }}
+                      className="rounded bg-violet-700 px-3 py-1 text-[11px] font-medium text-white hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                    >
+                      Ajouter la sélection ({addToCollectionPrompt.selectedIds.length})
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {statusMessage && (
             <div className="flex items-center gap-2 rounded-md border border-blue-800/70 bg-blue-950/60 px-3 py-1.5 text-xs text-blue-200">
               <Check className="h-3.5 w-3.5 shrink-0 text-blue-400" aria-hidden="true" />
@@ -1165,6 +1662,24 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             </div>
           )}
         </div>
+
+        {/* Tableau de bord & Gantt d'audit (apparaît au-dessus du contenu si activé) */}
+        {showStatsDashboard && (
+          <AuditStatsDashboard
+            trees={trees}
+            wordBodies={wordBodies}
+            onClose={() => setShowStatsDashboard(false)}
+            onJumpToNode={(nodeId) => {
+              const path = findNodePath(trees, nodeId);
+              if (path) {
+                path.forEach((p) => onToggleExpand(p.id));
+              }
+              // Highlight node via props if possible, or scroll
+              const targetEl = document.querySelector(`[data-wf-node-id="${nodeId}"]`);
+              targetEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }}
+          />
+        )}
 
         {/* Zone principale : Document Word / Data (large fenêtre) + Arborescence */}
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
@@ -1281,10 +1796,20 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             />
           )}
 
+          {/* Interface Intégrer collection (consolidation multi-documents JSON + Tables) */}
+          {integratedCollectionDoc && (
+            <IntegratedDataViewer
+              collectionDoc={integratedCollectionDoc}
+              onRegenerate={onRegenerateIntegratedCollection}
+              onSendToChat={onOpenDocumentInChat}
+              onClose={onCloseIntegratedCollection}
+            />
+          )}
+
           {/* Arborescence Workflow & Team Workflow + Inspecteur contextuel */}
           <div
             className={`flex min-h-0 flex-col overflow-hidden ${
-              openedWordDoc || integratedDataDoc
+              openedWordDoc || integratedDataDoc || integratedCollectionDoc
                 ? 'min-h-[180px] shrink-0 lg:w-[410px] lg:flex-none'
                 : 'flex-1'
             }`}
@@ -1300,6 +1825,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                 readinessReport={readinessReport}
                 onClose={() => setInspector(null)}
                 onJumpToNode={onJumpToNode}
+                onNavigateCrossRef={onNavigateCrossRef}
                 onAddReviewNote={onAddReviewNote}
                 onToggleReviewNote={onToggleReviewNote}
                 onDeleteReviewNote={onDeleteReviewNote}
@@ -1460,6 +1986,232 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
               <span>{checkedNodes.length > 0 ? 'Tout décocher' : 'Tout cocher'}</span>
             </button>
           </div>
+
+          {/* Section dédiée : Collection documentaire (toujours visible avec les 9 actions) */}
+          {(() => {
+            const ctxNode = contextMenu.node;
+            const allCols = collectAllCollections(trees);
+            const path = ctxNode ? findNodePath(trees, ctxNode.id) : null;
+            const resolvedTargetCol: WorkflowTreeNode | null =
+              ctxNode?.nodeType === 'collection'
+                ? ctxNode
+                : path
+                ? [...path].reverse().find((n) => n.nodeType === 'collection') || null
+                : allCols.length === 1
+                ? allCols[0]
+                : null;
+            const directTargetCol =
+              resolvedTargetCol ?? (allCols.length === 1 ? allCols[0] : null);
+            const createTarget =
+              ctxNode ??
+              visibleRoots[0] ??
+              trees[0] ??
+              null;
+            const createLocked = createTarget
+              ? isNodeLockedOrWithinLockedAncestor(trees, createTarget.id)
+              : true;
+            const hasAnyCollection = allCols.length > 0;
+            const directTargetLocked = directTargetCol
+              ? isNodeLockedOrWithinLockedAncestor(trees, directTargetCol.id)
+              : false;
+            const directSubtreeLocked = directTargetCol
+              ? hasLockedNodeInIds(trees, [directTargetCol.id])
+              : false;
+
+            const runCollectionAction = (
+              action:
+                | 'merge'
+                | 'duplicate'
+                | 'integrate'
+                | 'export'
+                | 'import-file'
+                | 'import-dir'
+                | 'delete',
+              actionLabel: string
+            ) => {
+              setContextMenu(null);
+              if (directTargetCol) {
+                if (action === 'merge') {
+                  setMergeCollectionPrompt({
+                    sourceId: directTargetCol.id,
+                    sourceLabel: directTargetCol.label,
+                    targetId: '',
+                    removeSource: true,
+                  });
+                } else if (action === 'duplicate') {
+                  onDuplicateNodes(directTargetCol.id);
+                } else if (action === 'integrate') {
+                  onIntegrateCollection(directTargetCol);
+                } else if (action === 'export') {
+                  onExportCollectionArchive(directTargetCol);
+                } else if (action === 'import-file') {
+                  importTargetIdRef.current = directTargetCol.id;
+                  importInputRef.current?.click();
+                } else if (action === 'import-dir') {
+                  importTargetIdRef.current = directTargetCol.id;
+                  importDirInputRef.current?.click();
+                } else if (action === 'delete') {
+                  onDeleteNodes(directTargetCol.id);
+                }
+                return;
+              }
+              setCollectionPickerPrompt({
+                action,
+                actionLabel,
+                selectedCollectionId: allCols[0]?.id || '',
+              });
+            };
+
+            return (
+              <div className="border-y border-violet-800/60 bg-violet-950/20 py-1">
+                <div className="flex items-center justify-between gap-2 px-3 py-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-violet-300">
+                    Collection documentaire
+                  </span>
+                  <span className="truncate font-mono text-[10px] text-violet-300/80">
+                    {directTargetCol
+                      ? directTargetCol.label
+                      : hasAnyCollection
+                      ? `${allCols.length} collections`
+                      : 'aucune créée'}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!createTarget || createLocked}
+                  onClick={() => {
+                    if (!createTarget) return;
+                    setAddingTarget({
+                      targetId: createTarget.id,
+                      targetLabel: createTarget.label,
+                      kind: 'collection',
+                    });
+                    setAddLabelDraft('');
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <Layers className="h-3.5 w-3.5 text-violet-400" aria-hidden="true" />
+                  <span>Créer collection</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!hasAnyCollection || directTargetLocked}
+                  onClick={() => {
+                    const targetCol = directTargetCol ?? allCols[0];
+                    if (!targetCol) return;
+                    const preSelected = checkedNonRootNodes
+                      .filter((n) => n.id !== targetCol.id)
+                      .map((n) => n.id);
+                    if (
+                      preSelected.length === 0 &&
+                      ctxNode &&
+                      ctxNode.nodeType !== 'root' &&
+                      ctxNode.id !== targetCol.id
+                    ) {
+                      preSelected.push(ctxNode.id);
+                    }
+                    setAddToCollectionPrompt({
+                      collectionId: targetCol.id,
+                      collectionLabel: targetCol.label,
+                      selectedIds: preSelected,
+                      filterText: '',
+                    });
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5 text-violet-400" aria-hidden="true" />
+                  <span>Ajouter dans collection</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!hasAnyCollection || directSubtreeLocked}
+                  onClick={() => runCollectionAction('merge', 'Fusionner collection')}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <Layers className="h-3.5 w-3.5 text-violet-400" aria-hidden="true" />
+                  <span>Fusionner collection</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!hasAnyCollection || directSubtreeLocked}
+                  onClick={() => runCollectionAction('duplicate', 'Dupliquer collection')}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <CopyPlus className="h-3.5 w-3.5 text-violet-400" aria-hidden="true" />
+                  <span>Dupliquer collection</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!hasAnyCollection || directTargetLocked}
+                  onClick={() => runCollectionAction('integrate', 'Intégrer collection')}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <Database className="h-3.5 w-3.5 text-violet-400" aria-hidden="true" />
+                  <span>Intégrer collection</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!hasAnyCollection || directSubtreeLocked}
+                  onClick={() => runCollectionAction('export', 'Exporter collection')}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <Archive className="h-3.5 w-3.5 text-violet-400" aria-hidden="true" />
+                  <span>Exporter collection</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!hasAnyCollection || directTargetLocked}
+                  onClick={() =>
+                    runCollectionAction('import-file', 'Importer fichier dans collection')
+                  }
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <Upload className="h-3.5 w-3.5 text-violet-400" aria-hidden="true" />
+                  <span>Importer fichier dans collection</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!hasAnyCollection || directTargetLocked}
+                  onClick={() =>
+                    runCollectionAction('import-dir', 'Importer dossier dans collection')
+                  }
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <FolderUp className="h-3.5 w-3.5 text-violet-400" aria-hidden="true" />
+                  <span>Importer dossier dans collection</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!hasAnyCollection || directSubtreeLocked}
+                  onClick={() => runCollectionAction('delete', 'Supprimer collection')}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-red-400 hover:bg-red-950/60 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Supprimer collection</span>
+                </button>
+              </div>
+            );
+          })()}
 
           {contextMenu.node && (() => {
             const ctxNode = contextMenu.node;
@@ -1902,7 +2654,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                       </span>
                     </button>
 
-                    {/* Point 5 : Cross-référencer */}
+                    {/* Point 5 : Cross-référencer + navigation parent/enfant */}
                     <button
                       type="button"
                       role="menuitem"
@@ -1920,6 +2672,52 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                           : ''}
                       </span>
                     </button>
+
+                    {ctxNode.crossRefs && ctxNode.crossRefs.length > 0 && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          if (ctxNode.crossRefs!.length === 1) {
+                            onNavigateCrossRef(ctxNode.crossRefs![0]);
+                          } else {
+                            setInspector({ mode: 'crossrefs', nodeId: ctxNode.id });
+                          }
+                          setContextMenu(null);
+                        }}
+                        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-indigo-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                      >
+                        <ArrowDownRight className="h-3.5 w-3.5 text-indigo-400" aria-hidden="true" />
+                        <span>
+                          Aller vers référence enfant ({ctxNode.crossRefs.length})
+                        </span>
+                      </button>
+                    )}
+
+                    {(() => {
+                      const ctxParentRefs = parentCrossRefMap.get(ctxNode.id) || [];
+                      if (ctxParentRefs.length === 0) return null;
+                      return (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            if (ctxParentRefs.length === 1) {
+                              onNavigateCrossRef(ctxParentRefs[0].id);
+                            } else {
+                              setInspector({ mode: 'crossrefs', nodeId: ctxNode.id });
+                            }
+                            setContextMenu(null);
+                          }}
+                          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-cyan-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                        >
+                          <CornerLeftUp className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" />
+                          <span>
+                            Aller vers parent référent ({ctxParentRefs.length})
+                          </span>
+                        </button>
+                      );
+                    })()}
 
                     {/* Point 7 : Assigner & Échéance */}
                     <button
@@ -2071,7 +2869,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                   <span>Ajouter une section</span>
                 </button>
 
-                {contextMenu.node.nodeType === 'section' && (
+                {(contextMenu.node.nodeType === 'section' ||
+                  contextMenu.node.nodeType === 'collection') && (
                   <button
                     type="button"
                     role="menuitem"

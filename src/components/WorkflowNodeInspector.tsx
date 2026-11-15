@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowDownRight,
   CalendarClock,
   Check,
   CheckCircle2,
   ClipboardList,
+  CornerLeftUp,
   History,
   Link2,
   MessageSquareWarning,
@@ -17,6 +19,7 @@ import {
 import { WorkflowTreeNode } from '../types/workflow';
 import {
   AuditReadinessReport,
+  buildParentCrossRefMap,
   collectAllNodesList,
   findNodeById,
 } from '../utils/workflowTreeOps';
@@ -43,6 +46,7 @@ interface WorkflowNodeInspectorProps {
   readinessReport: AuditReadinessReport | null;
   onClose: () => void;
   onJumpToNode: (nodeId: string) => void;
+  onNavigateCrossRef?: (nodeId: string) => void;
   onAddReviewNote: (nodeId: string, text: string) => void;
   onToggleReviewNote: (nodeId: string, noteId: string) => void;
   onDeleteReviewNote: (nodeId: string, noteId: string) => void;
@@ -80,6 +84,7 @@ export const WorkflowNodeInspector: React.FC<WorkflowNodeInspectorProps> = ({
   readinessReport,
   onClose,
   onJumpToNode,
+  onNavigateCrossRef,
   onAddReviewNote,
   onToggleReviewNote,
   onDeleteReviewNote,
@@ -89,9 +94,15 @@ export const WorkflowNodeInspector: React.FC<WorkflowNodeInspectorProps> = ({
   onRemoveCrossRef,
   onAssignNodes,
 }) => {
+  const navigateCrossRef = onNavigateCrossRef ?? onJumpToNode;
   const node = useMemo(
     () => findNodeById(trees, inspector.nodeId),
     [trees, inspector.nodeId]
+  );
+  const parentCrossRefMap = useMemo(() => buildParentCrossRefMap(trees), [trees]);
+  const parentRefNodes = useMemo(
+    () => (node ? parentCrossRefMap.get(node.id) || [] : []),
+    [parentCrossRefMap, node]
   );
   const locked = node ? isNodeLocked(node.id) : false;
 
@@ -354,16 +365,17 @@ export const WorkflowNodeInspector: React.FC<WorkflowNodeInspectorProps> = ({
         </div>
       )}
 
-      {/* Point 5 : Cross-référencement */}
+      {/* Point 5 : Cross-référencement bidirectionnel (Enfants & Parents) */}
       {inspector.mode === 'crossrefs' && node && (
         <div className="space-y-2.5">
           <div>
-            <div className="mb-1 text-[11px] font-medium text-slate-400">
-              Pièces liées ({node.crossRefs?.length || 0})
+            <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-indigo-300">
+              <ArrowDownRight className="h-3.5 w-3.5 text-indigo-400" aria-hidden="true" />
+              <span>Références enfants ({node.crossRefs?.length || 0})</span>
             </div>
             {!node.crossRefs || node.crossRefs.length === 0 ? (
               <div className="rounded border border-dashed border-slate-800 py-2 text-center text-[11px] text-slate-500">
-                Aucune référence croisée associée.
+                Aucune référence enfant associée.
               </div>
             ) : (
               <div className="flex flex-wrap gap-1.5">
@@ -376,11 +388,20 @@ export const WorkflowNodeInspector: React.FC<WorkflowNodeInspectorProps> = ({
                     >
                       <button
                         type="button"
-                        onClick={() => onJumpToNode(refId)}
-                        className="max-w-[220px] truncate hover:underline cursor-pointer"
-                        title={`Aller à ${target?.label || refId}`}
+                        onClick={() => navigateCrossRef(refId)}
+                        className="inline-flex items-center gap-1 max-w-[220px] truncate hover:underline cursor-pointer"
+                        title={`Sélectionner et ouvrir l'enfant : ${target?.label || refId}`}
                       >
-                        {target?.label || 'Élément introuvable'}
+                        <ArrowDownRight className="h-3 w-3 shrink-0 text-indigo-400" aria-hidden="true" />
+                        <span className="truncate">{target?.label || 'Élément introuvable'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigateCrossRef(refId)}
+                        title="Aller vers la référence enfant (ouvrir document)"
+                        className="rounded bg-indigo-800/80 px-1.5 py-0.5 text-[10px] font-medium text-white hover:bg-indigo-700 cursor-pointer"
+                      >
+                        Ouvrir
                       </button>
                       <button
                         type="button"
@@ -394,6 +415,36 @@ export const WorkflowNodeInspector: React.FC<WorkflowNodeInspectorProps> = ({
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-cyan-300">
+              <CornerLeftUp className="h-3.5 w-3.5 text-cyan-400" aria-hidden="true" />
+              <span>Parents référents identifiés ({parentRefNodes.length})</span>
+            </div>
+            {parentRefNodes.length === 0 ? (
+              <div className="rounded border border-dashed border-slate-800 py-2 text-center text-[11px] text-slate-500">
+                Aucun parent ne référence encore cet élément.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {parentRefNodes.map((parentNode) => (
+                  <button
+                    key={parentNode.id}
+                    type="button"
+                    onClick={() => navigateCrossRef(parentNode.id)}
+                    title={`Sélectionner et ouvrir le parent : ${parentNode.label}`}
+                    className="inline-flex items-center gap-1.5 rounded border border-cyan-700/70 bg-cyan-950/50 px-2 py-1 text-[11px] text-cyan-200 hover:bg-cyan-900/60 cursor-pointer"
+                  >
+                    <CornerLeftUp className="h-3 w-3 shrink-0 text-cyan-400" aria-hidden="true" />
+                    <span className="max-w-[200px] truncate">{parentNode.label}</span>
+                    <span className="rounded bg-cyan-800/80 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      Aller au parent
+                    </span>
+                  </button>
+                ))}
               </div>
             )}
           </div>

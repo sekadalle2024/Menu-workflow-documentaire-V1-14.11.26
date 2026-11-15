@@ -934,3 +934,57 @@ export function generateRandomFeuilleCouvertureJson(
   if (driveId) picked.driveId = driveId;
   return picked;
 }
+
+export interface IntegratedCollectionDocument {
+  collectionId: string;
+  collectionName: string;
+  collectedAt: string;
+  documentCount: number;
+  tablesConsolidees: Array<Record<string, Array<Record<string, string>>>>;
+  documents: FeuilleCouvertureDocument[];
+}
+
+export function generateCollectionDataJson(
+  collectionId: string,
+  collectionName: string,
+  docs: Array<{ id: string; label: string; driveId?: string }>
+): IntegratedCollectionDocument {
+  const documents: FeuilleCouvertureDocument[] =
+    docs.length > 0
+      ? docs.map((d) => generateRandomFeuilleCouvertureJson(d.label, d.driveId))
+      : [];
+
+  const mergedByTable = new Map<string, Array<Record<string, string>>>();
+
+  documents.forEach((docJson) => {
+    const docLabel = docJson.documentSource || 'Document';
+    const docTables = docJson['Etape mission - Feuille couverture'] || [];
+    docTables.forEach((tableObj) => {
+      const [tableName, rows] = Object.entries(tableObj)[0] || ['', []];
+      if (!tableName || !Array.isArray(rows)) return;
+      const existingRows = mergedByTable.get(tableName) || [];
+      rows.forEach((row) => {
+        existingRows.push({
+          Document: docLabel,
+          ...row,
+        });
+      });
+      mergedByTable.set(tableName, existingRows);
+    });
+  });
+
+  const tablesConsolidees: Array<Record<string, Array<Record<string, string>>>> = [];
+  mergedByTable.forEach((rows, tableName) => {
+    tablesConsolidees.push({ [tableName]: rows });
+  });
+
+  return {
+    collectionId,
+    collectionName,
+    collectedAt: new Date().toISOString(),
+    documentCount: docs.length,
+    tablesConsolidees,
+    documents,
+  };
+}
+
