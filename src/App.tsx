@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PanelRightOpen, RefreshCw } from 'lucide-react';
 import { AuditChatWorkspace } from './components/AuditChatWorkspace';
+import { AuditPlanExecutionView } from './components/AuditPlanExecutionView';
 import { DeployScriptView } from './components/DeployScriptView';
 import { DossierTreeAccordion } from './components/DossierTreeAccordion';
 import { LeftWorkflowSidebar } from './components/LeftWorkflowSidebar';
 import { PostgresDriveSchemaView } from './components/PostgresDriveSchemaView';
 import { RightSlidingMenu } from './components/RightSlidingMenu';
+import { SuiviRecosAnalyticsDashboard } from './components/SuiviRecosAnalyticsDashboard';
 import { TopBar } from './components/TopBar';
+import { RecosDashboard } from './features/recos';
 import {
   INITIAL_AUDIT_MESSAGES,
   SAMPLE_AUDIT_TEMPLATES,
@@ -18,6 +21,10 @@ import {
   createFullNatureWorkflowNode,
   createInitialWorkflowTrees,
 } from './data/workflowCatalog';
+import {
+  buildInitialSuiviRecosWordBodies,
+  updateRecoMetaInTree,
+} from './data/suiviRecosSimulation';
 import {
   FeuilleCouvertureDocument,
   generateCollectionDataJson,
@@ -32,11 +39,22 @@ import {
   DossierTreeNode,
 } from './types/dossier';
 import {
+  AuditPlanMissionMeta,
   ClientSessionConfig,
+  MissionTodoTask,
+  RecoSourceMetadata,
   WorkflowNatureId,
   WorkflowNodeStatus,
   WorkflowTreeNode,
 } from './types/workflow';
+import {
+  addTodoTaskOnNode,
+  clockInTodoTaskOnNode,
+  clockOutTodoTaskOnNode,
+  deleteTodoTaskOnNode,
+  NewTodoTaskInput,
+  updateTodoTaskOnNode,
+} from './utils/auditTodoOps';
 import {
   collectAllExpandableIds,
   collectAllNodeIds,
@@ -97,6 +115,11 @@ import {
   parseImportedDirectory,
   parseImportedFiles,
 } from './utils/workflowArchive';
+import {
+  injectMissionsIntoPlanNode,
+  updatePlanMissionMetaInTree,
+  updatePlanStepDatesInTree,
+} from './data/auditPlanWorkflowData';
 
 interface HistorySnapshot {
   trees: WorkflowTreeNode[];
@@ -105,8 +128,22 @@ interface HistorySnapshot {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<ActiveWorkspaceTab>('workspace');
+  const [activeTab, setActiveTab] = useState<ActiveWorkspaceTab>(() =>
+    typeof window !== 'undefined' && window.location.hash === '#recos'
+      ? 'recos'
+      : 'workspace'
+  );
   const [isRightMenuOpen, setIsRightMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const onHashChange = () => {
+      if (window.location.hash === '#recos') {
+        setActiveTab('recos');
+      }
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   // État du chat nod n8n & classification DOM du dossier de mission
   const [messages, setMessages] = useState<AuditChatMessage[]>(INITIAL_AUDIT_MESSAGES);
@@ -130,8 +167,11 @@ export default function App() {
       new Set([
         'root-workflow',
         'root-team-workflow',
+        'user-ex-2025',
+        'user-2025-suivi-recos',
         'user-ex-2026',
         'user-2026-ex-audit',
+        'user-2026-plan-audit',
         'team-ex-2026',
         'team-2026-ex-audit',
       ])
@@ -146,7 +186,9 @@ export default function App() {
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
   const [wfStatusMessage, setWfStatusMessage] = useState<string | null>(null);
   const [openedWordDoc, setOpenedWordDoc] = useState<WorkflowTreeNode | null>(null);
-  const [wordBodies, setWordBodies] = useState<Record<string, string>>({});
+  const [wordBodies, setWordBodies] = useState<Record<string, string>>(() =>
+    buildInitialSuiviRecosWordBodies()
+  );
   const [integratedDataDoc, setIntegratedDataDoc] = useState<{
     node: WorkflowTreeNode;
     data: FeuilleCouvertureDocument;
@@ -986,6 +1028,33 @@ export default function App() {
     [wfCheckedIds, session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
+  const handleToggleSingleNodeManagerReview = useCallback(
+    (nodeId: string) => {
+      if (!nodeId || nodeId === 'root-workflow' || nodeId === 'root-team-workflow') return;
+      if (isNodeLockedOrWithinLockedAncestor(workflowTrees, nodeId)) {
+        flashStatus('Action bloquée : élément verrouillé par code PIN.');
+        return;
+      }
+      const idSet = new Set([nodeId]);
+      pushUndoSnapshot('Revue manager');
+      setWorkflowTrees((prev) =>
+        appendAuditTrailToNodes(
+          toggleManagerReviewInTree(prev, idSet),
+          idSet,
+          session.userSignature,
+          'Revue manager basculée'
+        )
+      );
+      setOpenedWordDoc((prev) =>
+        prev && idSet.has(prev.id)
+          ? { ...prev, managerReviewed: !prev.managerReviewed }
+          : prev
+      );
+      flashStatus('Revue manager mise à jour.');
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
   const handleStartMoveNodes = useCallback(
     (fallbackNodeId?: string) => {
       const checkedTop = filterTopLevelSelectedIds(workflowTrees, wfCheckedIds);
@@ -1299,6 +1368,23 @@ export default function App() {
     [workflowTrees, wfCheckedIds, session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
+  const handleSetSingleNodeStatus = useCallback(
+    (status: WorkflowNodeStatus, nodeId: string) => {
+      if (!nodeId || nodeId === 'root-workflow' || nodeId === 'root-team-workflow') return;
+      const idSet = new Set([nodeId]);
+      if (hasLockedNodeInIds(workflowTrees, idSet)) {
+        flashStatus('Action bloquée : un élément verrouillé nécessite son code PIN.');
+        return;
+      }
+      pushUndoSnapshot(`Statut → ${WORKFLOW_STATUS_LABELS[status]}`);
+      setWorkflowTrees((prev) =>
+        setNodesStatusInTree(prev, idSet, status, session.userSignature)
+      );
+      flashStatus(`Statut mis à jour : « ${WORKFLOW_STATUS_LABELS[status]} ».`);
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
   const handleAddReviewNote = useCallback(
     (nodeId: string, text: string) => {
       if (isNodeLockedOrWithinLockedAncestor(workflowTrees, nodeId)) {
@@ -1514,6 +1600,162 @@ export default function App() {
     [workflowTrees, flashStatus]
   );
 
+  const handleAddTodoTask = useCallback(
+    (nodeId: string, input: NewTodoTaskInput) => {
+      const res = addTodoTaskOnNode(workflowTrees, nodeId, input, session.userSignature);
+      if (res.error) {
+        flashStatus(res.error);
+        return;
+      }
+      pushUndoSnapshot(`Tâche To-do « ${input.title} »`);
+      setWorkflowTrees(res.trees);
+      flashStatus(`Tâche planifiée (08h/j) : « ${input.title} ».`);
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleUpdateTodoTask = useCallback(
+    (
+      nodeId: string,
+      taskId: string,
+      patch: Partial<MissionTodoTask>,
+      auditLabel = 'Tâche To-do mise à jour'
+    ) => {
+      const res = updateTodoTaskOnNode(
+        workflowTrees,
+        nodeId,
+        taskId,
+        patch,
+        session.userSignature,
+        auditLabel
+      );
+      if (res.error) {
+        flashStatus(res.error);
+        return;
+      }
+      pushUndoSnapshot(auditLabel);
+      setWorkflowTrees(res.trees);
+      flashStatus(auditLabel);
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleDeleteTodoTask = useCallback(
+    (nodeId: string, taskId: string) => {
+      const res = deleteTodoTaskOnNode(workflowTrees, nodeId, taskId, session.userSignature);
+      if (res.error) {
+        flashStatus(res.error);
+        return;
+      }
+      pushUndoSnapshot('Suppression tâche To-do');
+      setWorkflowTrees(res.trees);
+      flashStatus('Tâche To-do supprimée.');
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleClockInTodoTask = useCallback(
+    (nodeId: string, taskId: string) => {
+      const res = clockInTodoTaskOnNode(workflowTrees, nodeId, taskId, session.userSignature);
+      if (res.error) {
+        flashStatus(res.error);
+        return;
+      }
+      pushUndoSnapshot('Pointage début tâche');
+      setWorkflowTrees(res.trees);
+      flashStatus('Pointage début enregistré — tâche en cours.');
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleClockOutTodoTask = useCallback(
+    (nodeId: string, taskId: string) => {
+      const res = clockOutTodoTaskOnNode(workflowTrees, nodeId, taskId, session.userSignature);
+      if (res.error) {
+        flashStatus(res.error);
+        return;
+      }
+      pushUndoSnapshot('Pointage fin tâche');
+      setWorkflowTrees(res.trees);
+      flashStatus('Pointage fin enregistré — écart horaire calculé.');
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleInjectPlanMissions = useCallback(
+    (targetNodeId: string, count: number) => {
+      const res = injectMissionsIntoPlanNode(
+        workflowTrees,
+        targetNodeId,
+        count,
+        session.userSignature
+      );
+      pushUndoSnapshot(`Injection ${res.injectedCount} missions Plan d’audit`);
+      setWorkflowTrees(res.trees);
+      if (res.targetNatureId) {
+        setWfExpandedIds((prev) => {
+          const next = new Set(prev);
+          next.add(res.targetNatureId!);
+          return next;
+        });
+      }
+      flashStatus(
+        `Plan annuel d’audit intégré : ${res.injectedCount} missions Industrie 2026 injectées (moy. 3 sem., 3 auditeurs).`
+      );
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleUpdatePlanStepDates = useCallback(
+    (
+      stepNodeId: string,
+      dateDebut: string,
+      dateFin: string,
+      dateFinReelle?: string
+    ) => {
+      pushUndoSnapshot('Mise à jour dates étape Plan d’audit');
+      setWorkflowTrees((prev) =>
+        updatePlanStepDatesInTree(
+          prev,
+          stepNodeId,
+          dateDebut,
+          dateFin,
+          dateFinReelle,
+          session.userSignature
+        )
+      );
+      flashStatus(
+        `Dates de l’étape mises à jour (${dateDebut} → ${dateFin}) — Gantts recalculés.`
+      );
+    },
+    [session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleUpdatePlanMissionMeta = useCallback(
+    (
+      missionNodeId: string,
+      patch: Partial<AuditPlanMissionMeta> & { titre?: string }
+    ) => {
+      pushUndoSnapshot('Modification fiche mission Plan d’audit');
+      setWorkflowTrees((prev) =>
+        updatePlanMissionMetaInTree(prev, missionNodeId, patch, session.userSignature)
+      );
+      flashStatus('Informations de la mission mises à jour dans le Plan annuel d’audit.');
+    },
+    [session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleUpdateRecoMeta = useCallback(
+    (recoNodeId: string, patch: Partial<RecoSourceMetadata>) => {
+      pushUndoSnapshot('Modification fiche Suivi Recos');
+      setWorkflowTrees((prev) =>
+        updateRecoMetaInTree(prev, recoNodeId, patch, session.userSignature)
+      );
+      flashStatus('Informations de la recommandation mises à jour.');
+    },
+    [session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
   const handleInitClient = useCallback(() => {
     setSession(INITIAL_CLIENT_SESSION);
     setWorkflowTrees(createInitialWorkflowTrees());
@@ -1620,7 +1862,12 @@ export default function App() {
         onTogglePanel={() => setIsRightMenuOpen((prev) => !prev)}
       />
 
-      <main className="mx-auto max-w-[1440px] px-6 py-6">
+      {activeTab === 'recos' ? (
+        <main className="min-h-[calc(100vh-57px)] w-full">
+          <RecosDashboard className="min-h-[calc(100vh-57px)]" />
+        </main>
+      ) : (
+        <main className="mx-auto max-w-[1440px] px-6 py-6">
         <div className="mb-6 flex flex-col justify-between gap-4 border-b border-slate-200 pb-5 lg:flex-row lg:items-end">
           <div className="max-w-2xl">
             <p className="text-xs font-medium text-slate-500">
@@ -1772,6 +2019,51 @@ export default function App() {
               </div>
             )}
 
+            {activeTab === 'suivi-recos-analytics' && (
+              <SuiviRecosAnalyticsDashboard
+                trees={workflowTrees}
+                onToggleManagerReview={handleToggleSingleNodeManagerReview}
+                onSetNodeStatus={handleSetSingleNodeStatus}
+                onAddReviewNote={handleAddReviewNote}
+                onToggleReviewNote={handleToggleReviewNote}
+                onDeleteReviewNote={handleDeleteReviewNote}
+                onUpdateRecoMeta={handleUpdateRecoMeta}
+                onOpenWordDoc={(docNode) => {
+                  handleJumpToNode(docNode.id);
+                  handleOpenWordDoc(docNode);
+                  setIsRightMenuOpen(true);
+                }}
+                onIntegrateCollection={(colNode) => {
+                  handleJumpToNode(colNode.id);
+                  handleIntegrateCollection(colNode);
+                  setIsRightMenuOpen(true);
+                }}
+                onOpenNodeInWorkflow={(nodeId) => {
+                  handleJumpToNode(nodeId);
+                  setIsRightMenuOpen(true);
+                }}
+              />
+            )}
+
+            {activeTab === 'audit-plan' && (
+              <AuditPlanExecutionView
+                trees={workflowTrees}
+                userSignature={session.userSignature}
+                onAddTodoTask={handleAddTodoTask}
+                onUpdateTodoTask={handleUpdateTodoTask}
+                onDeleteTodoTask={handleDeleteTodoTask}
+                onClockInTodoTask={handleClockInTodoTask}
+                onClockOutTodoTask={handleClockOutTodoTask}
+                onInjectPlanMissions={handleInjectPlanMissions}
+                onUpdatePlanStepDates={handleUpdatePlanStepDates}
+                onUpdatePlanMissionMeta={handleUpdatePlanMissionMeta}
+                onOpenNodeInWorkflow={(nodeId) => {
+                  handleJumpToNode(nodeId);
+                  setIsRightMenuOpen(true);
+                }}
+              />
+            )}
+
             {activeTab === 'schema' && (
               <PostgresDriveSchemaView trees={workflowTrees} session={session} />
             )}
@@ -1779,7 +2071,8 @@ export default function App() {
             {activeTab === 'script' && <DeployScriptView />}
           </div>
         </div>
-      </main>
+        </main>
+      )}
 
       <RightSlidingMenu
         isOpen={isRightMenuOpen}
@@ -1868,6 +2161,23 @@ export default function App() {
         onAssignNodes={handleAssignNodes}
         onJumpToNode={handleJumpToNode}
         onNavigateCrossRef={handleNavigateCrossRef}
+        onAddTodoTask={handleAddTodoTask}
+        onUpdateTodoTask={handleUpdateTodoTask}
+        onDeleteTodoTask={handleDeleteTodoTask}
+        onClockInTodoTask={handleClockInTodoTask}
+        onClockOutTodoTask={handleClockOutTodoTask}
+        onInjectPlanMissions={handleInjectPlanMissions}
+        onUpdatePlanStepDates={handleUpdatePlanStepDates}
+        onUpdatePlanMissionMeta={handleUpdatePlanMissionMeta}
+        onUpdateRecoMeta={handleUpdateRecoMeta}
+        onOpenAuditPlanTab={() => {
+          setActiveTab('audit-plan');
+          setIsRightMenuOpen(false);
+        }}
+        onOpenSuiviRecosAnalyticsTab={() => {
+          setActiveTab('suivi-recos-analytics');
+          setIsRightMenuOpen(false);
+        }}
       />
     </div>
   );

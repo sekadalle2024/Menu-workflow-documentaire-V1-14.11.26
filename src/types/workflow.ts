@@ -2,6 +2,7 @@ export type WorkflowNatureId =
   | 'perm-audit'
   | 'ex-audit'
   | 'suivi-recos'
+  | 'plan-audit'
   | 'perm-cac'
   | 'ex-cac'
   | 'manuel-proc-cac'
@@ -50,6 +51,99 @@ export interface AuditTrailEntry {
   detail?: string;
 }
 
+export type TodoTaskStatus = 'todo' | 'in-progress' | 'blocked' | 'done';
+
+export type MethodologyAssessment = 'pending' | 'conforme' | 'a-justifier' | 'hors-perimetre';
+
+export type AuditPlanScheduleStatus = 'en-avance' | 'normal' | 'en-retard';
+
+export type AuditPlanTaskUnit = 'heure' | 'jour' | 'semaine';
+
+export interface MissionTodoTask {
+  id: string;
+  nodeId: string;
+  title: string;
+  auditor: string;
+  plannedDate: string; // YYYY-MM-DD (jour ouvrable)
+  plannedEndDate?: string; // YYYY-MM-DD (date de fin prévue)
+  actualEndDate?: string; // YYYY-MM-DD (date de fin réelle / ajustée)
+  plannedStartHour: number; // 8..17 (base 08h/jour ouvrable)
+  plannedDurationHours: number; // ex: 1..24h réparties sur 8h/j ouvrable
+  unit?: AuditPlanTaskUnit;
+  actualStartAt?: string; // ISO datetime du pointage début
+  actualEndAt?: string; // ISO datetime du pointage fin
+  actualHours?: number; // heures réelles calculées ou ajustées
+  varianceHours?: number; // écart = actualHours - plannedDurationHours
+  scheduleStatus?: AuditPlanScheduleStatus;
+  status: TodoTaskStatus;
+  blockerReason?: string;
+  teamSupportRequested?: boolean;
+  crippNormRef?: string;
+  methodologyAssessment?: MethodologyAssessment;
+  managerRedirectNote?: string;
+  createdAt: string;
+}
+
+export interface AuditPlanMissionMeta {
+  code: string;
+  no: number;
+  secteur: string;
+  exercice: string;
+  direction: string;
+  objectif: string;
+  perimetre: string;
+  risque: 'Critique' | 'Élevé' | 'Moyen' | 'Faible';
+  normeCripp: string;
+  nbAuditeurs: number;
+  auditeurs: string[];
+  chefMission: string;
+  dureeSemaines: number;
+  dateDebut: string; // ISO YYYY-MM-DD
+  dateFinPrevue: string; // ISO YYYY-MM-DD
+  dateFinReelle?: string; // ISO YYYY-MM-DD
+  progressionPct: number;
+  budgetHeures: number;
+  heuresRealisees: number;
+  ecartJours: number; // < 0 en avance, 0 normal, > 0 en retard
+  statutProgression: AuditPlanScheduleStatus;
+}
+
+export interface AuditPlanStepMeta {
+  phase: 'Phase de préparation' | 'Phase de réalisation' | 'Phase de conclusion' | 'Outils';
+  stepNumber?: number;
+  dateDebut: string; // ISO YYYY-MM-DD
+  dateFin: string; // ISO YYYY-MM-DD
+  dateFinReelle?: string; // ISO YYYY-MM-DD
+  progressionPct: number;
+  ecartJours: number;
+  statutProgression: AuditPlanScheduleStatus;
+}
+
+export interface RecoSourceMetadata {
+  no: number;
+  intitule: string;
+  observation: string;
+  constat: string;
+  risque: string;
+  recommandation: string;
+  commentaireAudite: string;
+  commentaireAuditeur: string;
+  planAction: string;
+  responsable: string;
+  delai: string;
+  evaluationRisque: string;
+  mission: string;
+  statut: string;
+  document: string;
+  direction: string;
+  processus: string;
+  emailAudite: string;
+  emailAuditeur: string;
+  reportDelai: string;
+  refRecos: string;
+  intituleRecos: string;
+}
+
 export interface WorkflowTreeNode {
   id: string;
   label: string;
@@ -69,6 +163,10 @@ export interface WorkflowTreeNode {
   assignee?: string;
   dueDate?: string;
   auditTrail?: AuditTrailEntry[];
+  todoTasks?: MissionTodoTask[];
+  recoMeta?: RecoSourceMetadata;
+  planMissionMeta?: AuditPlanMissionMeta;
+  planStepMeta?: AuditPlanStepMeta;
   children?: WorkflowTreeNode[];
 }
 

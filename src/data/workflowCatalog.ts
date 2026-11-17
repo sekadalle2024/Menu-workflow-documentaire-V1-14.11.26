@@ -5,6 +5,7 @@ import {
   WorkflowTreeNode,
 } from '../types/workflow';
 import { cloneNodeWithFreshIds } from '../utils/workflowTreeOps';
+import { attachStarterTodoTasks } from '../utils/auditTodoOps';
 import {
   DOC_MISSION_CARTOGRAPHIES,
   EX_AUDIT_100_GROUPS,
@@ -22,6 +23,11 @@ import {
   buildCategoryTreeNodes,
   wrapDocsForScope,
 } from './workflowDemoData';
+import {
+  buildSuiviRecos2024Children,
+  buildSuiviRecos2025Children,
+} from './suiviRecosSimulation';
+import { buildPlanAudit2026Children } from './auditPlanWorkflowData';
 
 export const INITIAL_CLIENT_SESSION: ClientSessionConfig = {
   client: 'Banque Atlantique UMOA',
@@ -69,8 +75,21 @@ export const WORKFLOW_SIDEBAR_ITEMS: WorkflowCategoryMeta[] = [
     shortLabel: 'Suivi Recos',
     iconKey: 'list-checks',
     subItems: [
+      { id: 'sm-recos-base', label: '2025 · 10 Missions / 90 Recos', targetNodeSuffix: '2025-suivi-recos' },
+      { id: 'sm-recos-2024', label: '2024 · 8 Missions / 56 Recos', targetNodeSuffix: '2024-suivi-recos' },
       { id: 'sm-recos-relance', label: '2026 · Sections 6.1 à 6.10 & KPI', targetNodeSuffix: '2026-suivi-recos' },
-      { id: 'sm-recos-base', label: '2025 · Base consolidée & Preuves', targetNodeSuffix: '2025-suivi-recos' },
+    ],
+  },
+  {
+    id: 'plan-audit',
+    label: 'Workflow Plan annuel d’audit',
+    shortLabel: 'Plan Annuel Audit',
+    iconKey: 'calendar-range',
+    subItems: [
+      { id: 'sm-plan-2026', label: 'Exercice 2026 · 12 Missions Industrie', targetNodeSuffix: '2026-plan-audit' },
+      { id: 'sm-plan-m1', label: 'Mission 01 · Maintenance Préventive & GMAO', targetNodeSuffix: '2026-plan-m-1' },
+      { id: 'sm-plan-m5', label: 'Mission 05 · Achats Industriels & Sous-Traitance', targetNodeSuffix: '2026-plan-m-5' },
+      { id: 'sm-plan-m6', label: 'Mission 06 · Cybersécurité OT / SCADA', targetNodeSuffix: '2026-plan-m-6' },
     ],
   },
   {
@@ -264,6 +283,13 @@ function buildExerciceFirstTrees(prefix: 'user' | 'team'): WorkflowTreeNode[] {
       nodeType: 'nature',
       natureId: 'suivi-recos',
       children: buildCategoryTreeNodes(prefix, 'suivi-recos', '2026-sr', SUIVI_RECOS_SECTIONS_2026),
+    },
+    {
+      id: `${prefix}-2026-plan-audit`,
+      label: 'Workflow Plan annuel d’audit',
+      nodeType: 'nature',
+      natureId: 'plan-audit',
+      children: buildPlanAudit2026Children(prefix),
     },
     {
       id: `${prefix}-2026-perm-cac`,
@@ -510,12 +536,7 @@ function buildExerciceFirstTrees(prefix: 'user' | 'team'): WorkflowTreeNode[] {
       label: 'Workflow Suivi recos',
       nodeType: 'nature',
       natureId: 'suivi-recos',
-      children: wrapDocsForScope(prefix, '25-sr', 'suivi-recos', [
-        { id: 'sr25-1', label: '6.2 Fichier consolidé de suivi des recos 2025 (P1/P2/P3)', sig: 'JFK' },
-        { id: 'sr25-2', label: '6.5 Dossier de preuves et re-tests de validation 2025 (15.2)', sig: 'JFK' },
-        { id: 'sr25-3', label: '6.9 Clôture & double validation des actions soldées 2025', sig: 'SEK' },
-        { id: 'sr25-4', label: '6.10 KPI annuels de mise en œuvre des recommandations 2025', sig: 'TAK' },
-      ]),
+      children: buildSuiviRecos2025Children(prefix),
     },
     {
       id: `${prefix}-2025-perm-cac`,
@@ -603,9 +624,7 @@ function buildExerciceFirstTrees(prefix: 'user' | 'team'): WorkflowTreeNode[] {
       label: 'Workflow Suivi recos',
       nodeType: 'nature',
       natureId: 'suivi-recos',
-      children: wrapDocsForScope(prefix, '24-sr', 'suivi-recos', [
-        { id: 'sr24-arc', label: '6.9 Bilan de clôture des recommandations 2024 (soldées & reportées)', sig: 'TAK' },
-      ]),
+      children: buildSuiviRecos2024Children(prefix),
     },
   ];
 
@@ -632,7 +651,7 @@ function buildExerciceFirstTrees(prefix: 'user' | 'team'): WorkflowTreeNode[] {
 }
 
 export function createInitialWorkflowTrees(): WorkflowTreeNode[] {
-  return [
+  const base: WorkflowTreeNode[] = [
     {
       id: 'root-workflow',
       label: 'Workflow',
@@ -646,6 +665,7 @@ export function createInitialWorkflowTrees(): WorkflowTreeNode[] {
       children: buildExerciceFirstTrees('team'),
     },
   ];
+  return attachStarterTodoTasks(base);
 }
 
 export function createFullNatureWorkflowNode(

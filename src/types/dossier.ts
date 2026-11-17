@@ -35,6 +35,12 @@ export interface AuditChatMessage {
   table?: AuditMessageTable;
 }
 
-export type ActiveWorkspaceTab = 'workspace' | 'schema' | 'script';
+export type ActiveWorkspaceTab =
+  | 'workspace'
+  | 'suivi-recos-analytics'
+  | 'recos'
+  | 'audit-plan'
+  | 'schema'
+  | 'script';
 
 export type AccordionMode = 'multi' | 'single';

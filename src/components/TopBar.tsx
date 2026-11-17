@@ -47,6 +47,48 @@ export const TopBar: React.FC<TopBarProps> = ({
             Espace Mission
           </a>
           <a
+            href="#suivi-recos-analytics"
+            onClick={(e) => {
+              e.preventDefault();
+              onSelectTab('suivi-recos-analytics');
+            }}
+            className={`whitespace-nowrap shrink-0 transition-colors hover:text-slate-900 ${
+              activeTab === 'suivi-recos-analytics'
+                ? 'text-slate-900 underline decoration-blue-700 decoration-2 underline-offset-8'
+                : ''
+            }`}
+          >
+            Power BI Recos
+          </a>
+          <a
+            href="#recos"
+            onClick={(e) => {
+              e.preventDefault();
+              onSelectTab('recos');
+            }}
+            className={`whitespace-nowrap shrink-0 transition-colors hover:text-slate-900 ${
+              activeTab === 'recos'
+                ? 'text-slate-900 underline decoration-blue-700 decoration-2 underline-offset-8'
+                : ''
+            }`}
+          >
+            Tableau Recos
+          </a>
+          <a
+            href="#plan-audit-temps"
+            onClick={(e) => {
+              e.preventDefault();
+              onSelectTab('audit-plan');
+            }}
+            className={`whitespace-nowrap shrink-0 transition-colors hover:text-slate-900 ${
+              activeTab === 'audit-plan'
+                ? 'text-slate-900 underline decoration-teal-700 decoration-2 underline-offset-8'
+                : ''
+            }`}
+          >
+            Plan d&apos;Audit &amp; Temps
+          </a>
+          <a
             href="#menu-coulissant"
             onClick={(e) => {
               e.preventDefault();
@@ -96,6 +138,33 @@ export const TopBar: React.FC<TopBarProps> = ({
             {isPanelOpen ? 'Fermer le menu' : 'Menu coulissant'}
           </button>
         </div>
+      </div>
+
+      {/* Navigation compacte mobile/tablette */}
+      <div className="flex items-center gap-2 overflow-x-auto border-t border-slate-100 px-4 py-2 text-xs font-medium text-slate-600 md:hidden">
+        {(
+          [
+            { id: 'workspace', label: 'Espace Mission' },
+            { id: 'suivi-recos-analytics', label: 'Power BI Recos' },
+            { id: 'recos', label: 'Tableau Recos' },
+            { id: 'audit-plan', label: 'Plan d’Audit' },
+            { id: 'schema', label: 'PostgreSQL & Drive' },
+            { id: 'script', label: 'Script' },
+          ] as Array<{ id: ActiveWorkspaceTab; label: string }>
+        ).map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onSelectTab(item.id)}
+            className={`shrink-0 rounded-md px-2.5 py-1 transition-colors cursor-pointer ${
+              activeTab === item.id
+                ? 'bg-blue-700 text-white'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            {item.label}
+          </button>
+        ))}
       </div>
     </header>
   );

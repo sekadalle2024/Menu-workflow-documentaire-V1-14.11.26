@@ -8,6 +8,7 @@ import {
   ArrowRightLeft,
   ArrowUp,
   BarChart3,
+  CalendarRange,
   Check,
   ChevronDown,
   ChevronRight,
@@ -24,13 +25,17 @@ import {
   ExternalLink,
   FileSpreadsheet,
   Folder,
+  FolderKanban,
   FolderOpen,
   FolderUp,
   FileText,
+  GanttChart,
   History,
+  Info,
   KeyRound,
   Layers,
   Link2,
+  ListTodo,
   Lock,
   MessageSquarePlus,
   MessageSquareWarning,
@@ -42,6 +47,7 @@ import {
   Redo2,
   Search,
   ShieldAlert,
+  Table2,
   Trash2,
   Undo2,
   Unlock,
@@ -57,17 +63,22 @@ import {
   IntegratedCollectionDocument,
 } from '../data/feuilleCouvertureTemplates';
 import {
+  AuditPlanMissionMeta,
   ClientSessionConfig,
+  MissionTodoTask,
+  RecoSourceMetadata,
   WorkflowNatureId,
   WorkflowNodeStatus,
   WorkflowTreeNode,
 } from '../types/workflow';
+import { NewTodoTaskInput } from '../utils/auditTodoOps';
 import {
   AuditReadinessReport,
   buildParentCrossRefMap,
   collectAllCollections,
   collectAllNodesList,
   countDocumentsInNode,
+  findNodeById,
   findNodePath,
   generateRandomAuditDocumentName,
   getWorkflowCheckState,
@@ -77,12 +88,27 @@ import {
   runAuditReadinessCheck,
   WORKFLOW_STATUS_LABELS,
 } from '../utils/workflowTreeOps';
+import {
+  extractSuiviRecosFromTrees,
+  findRecoRecordByRefOrLabel,
+} from '../data/suiviRecosSimulation';
+import { computeContextualWorkflowMetrics } from '../data/auditPlanWorkflowData';
 import { IntegratedDataViewer } from './IntegratedDataViewer';
+import { RecoInfoManagerPanel, RecoPanelViewMode } from './RecoInfoManagerPanel';
 import {
   NodeInspectorState,
   WorkflowNodeInspector,
 } from './WorkflowNodeInspector';
 import { AuditStatsDashboard } from './AuditStatsDashboard';
+import {
+  AuditPlanPanelMode,
+  AuditPlanWorkflowPanel,
+} from './AuditPlanWorkflowPanel';
+import { ExportEtatsPanel } from './ExportEtatsPanel';
+import {
+  ExportActivityType,
+  ExportFormatKind,
+} from '../utils/etatExportEngine';
 
 interface TriCheckboxProps {
   state: 'checked' | 'unchecked' | 'indeterminate';
@@ -209,6 +235,33 @@ interface RightSlidingMenuProps {
   onAssignNodes: (targetIds: string[], assignee: string, dueDate: string) => void;
   onJumpToNode: (targetId: string) => void;
   onNavigateCrossRef: (targetId: string) => void;
+  onAddTodoTask: (nodeId: string, input: NewTodoTaskInput) => void;
+  onUpdateTodoTask: (
+    nodeId: string,
+    taskId: string,
+    patch: Partial<MissionTodoTask>,
+    auditLabel?: string
+  ) => void;
+  onDeleteTodoTask: (nodeId: string, taskId: string) => void;
+  onClockInTodoTask: (nodeId: string, taskId: string) => void;
+  onClockOutTodoTask: (nodeId: string, taskId: string) => void;
+  onInjectPlanMissions: (targetNodeId: string, count: number) => void;
+  onUpdatePlanStepDates: (
+    stepNodeId: string,
+    dateDebut: string,
+    dateFin: string,
+    dateFinReelle?: string
+  ) => void;
+  onUpdatePlanMissionMeta?: (
+    missionNodeId: string,
+    patch: Partial<AuditPlanMissionMeta> & { titre?: string }
+  ) => void;
+  onUpdateRecoMeta?: (
+    recoNodeId: string,
+    patch: Partial<RecoSourceMetadata>
+  ) => void;
+  onOpenAuditPlanTab: () => void;
+  onOpenSuiviRecosAnalyticsTab?: () => void;
 }
 
 function nodeMatchesSearch(node: WorkflowTreeNode, query: string): boolean {
@@ -299,6 +352,17 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   onAssignNodes,
   onJumpToNode,
   onNavigateCrossRef,
+  onAddTodoTask,
+  onUpdateTodoTask,
+  onDeleteTodoTask,
+  onClockInTodoTask,
+  onClockOutTodoTask,
+  onInjectPlanMissions,
+  onUpdatePlanStepDates,
+  onUpdatePlanMissionMeta,
+  onUpdateRecoMeta,
+  onOpenAuditPlanTab,
+  onOpenSuiviRecosAnalyticsTab,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showApiPanel, setShowApiPanel] = useState(false);
@@ -358,12 +422,160 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [showNatureSubmenu, setShowNatureSubmenu] = useState(false);
   const [showStatusSubmenu, setShowStatusSubmenu] = useState(false);
+  const [showExportEtatSubmenu, setShowExportEtatSubmenu] = useState(false);
   const [inspector, setInspector] = useState<NodeInspectorState | null>(null);
   const [readinessReport, setReadinessReport] = useState<AuditReadinessReport | null>(null);
+  const [openedRecoInfoId, setOpenedRecoInfoId] = useState<string | null>(null);
+  const [openedRecoInitialView, setOpenedRecoInitialView] =
+    useState<RecoPanelViewMode>('accordeon');
+  const [openedRecoScopeId, setOpenedRecoScopeId] = useState<string | undefined>(
+    undefined
+  );
+  const [openedAuditPlanState, setOpenedAuditPlanState] = useState<{
+    mode: AuditPlanPanelMode;
+    scopeNodeId?: string;
+    missionId?: string;
+    stepId?: string;
+  } | null>(null);
+  const [openedExportEtat, setOpenedExportEtat] = useState<{
+    activity: ExportActivityType;
+    mode: ExportFormatKind;
+    scopeNodeId?: string;
+    nonce: number;
+  } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const importDirInputRef = useRef<HTMLInputElement | null>(null);
   const importTargetIdRef = useRef<string | null>(null);
+
+  const openedRecoInfoNode = useMemo(
+    () => (openedRecoInfoId ? findNodeById(trees, openedRecoInfoId) : null),
+    [trees, openedRecoInfoId]
+  );
+
+  const openedRecoInfoRecord = useMemo(
+    () =>
+      openedRecoInfoNode
+        ? openedRecoInfoNode.recoMeta ??
+          findRecoRecordByRefOrLabel(openedRecoInfoNode.label) ??
+          null
+        : null,
+    [openedRecoInfoNode]
+  );
+
+  useEffect(() => {
+    if (openedWordDoc || integratedDataDoc || integratedCollectionDoc) {
+      setOpenedRecoInfoId(null);
+      setOpenedRecoScopeId(undefined);
+      setOpenedAuditPlanState(null);
+      setOpenedExportEtat(null);
+    }
+  }, [openedWordDoc, integratedDataDoc, integratedCollectionDoc]);
+
+  const openExportEtatPanel = (
+    activity: ExportActivityType,
+    mode: ExportFormatKind,
+    targetNode: WorkflowTreeNode | null
+  ) => {
+    if (openedWordDoc) onCloseWordDoc();
+    if (integratedDataDoc) onCloseIntegratedData();
+    if (integratedCollectionDoc) onCloseIntegratedCollection();
+    setOpenedRecoInfoId(null);
+    setOpenedRecoScopeId(undefined);
+    setOpenedAuditPlanState(null);
+    const resolvedScopeId =
+      !targetNode
+        ? undefined
+        : activity === 'document'
+        ? targetNode.id
+        : activity === 'etape-mission'
+        ? targetNode.natureId === 'plan-audit'
+          ? targetNode.id
+          : undefined
+        : targetNode.natureId === activity
+        ? targetNode.id
+        : undefined;
+    setOpenedExportEtat({
+      activity,
+      mode,
+      scopeNodeId: resolvedScopeId,
+      nonce: Date.now(),
+    });
+  };
+
+  const openRecoInfoPanel = (
+    targetNode: WorkflowTreeNode,
+    initialView: RecoPanelViewMode = 'accordeon',
+    scopeId?: string
+  ) => {
+    if (openedWordDoc) onCloseWordDoc();
+    if (integratedDataDoc) onCloseIntegratedData();
+    if (integratedCollectionDoc) onCloseIntegratedCollection();
+    setOpenedAuditPlanState(null);
+    setOpenedExportEtat(null);
+
+    const directReco =
+      targetNode.recoMeta ??
+      (targetNode.nodeType === 'sous-section' && targetNode.natureId === 'suivi-recos'
+        ? findRecoRecordByRefOrLabel(targetNode.label)
+        : undefined);
+
+    let resolvedNode: WorkflowTreeNode | undefined = directReco ? targetNode : undefined;
+    let resolvedScopeId = scopeId;
+
+    if (!resolvedNode) {
+      const scopedEntries = extractSuiviRecosFromTrees(trees, scopeId ?? targetNode.id);
+      if (scopedEntries.length > 0) {
+        resolvedNode = scopedEntries[0].node;
+        resolvedScopeId = scopeId ?? targetNode.id;
+      } else {
+        const fallbackEntries = extractSuiviRecosFromTrees(trees);
+        resolvedNode = fallbackEntries[0]?.node;
+        resolvedScopeId = undefined;
+      }
+    }
+
+    if (!resolvedNode) return;
+    setOpenedRecoInitialView(initialView);
+    setOpenedRecoScopeId(resolvedScopeId);
+    setOpenedRecoInfoId(resolvedNode.id);
+    onJumpToNode(resolvedNode.id);
+  };
+
+  const openAuditPlanPanel = (
+    panelMode: AuditPlanPanelMode,
+    targetNode: WorkflowTreeNode | null
+  ) => {
+    if (openedWordDoc) onCloseWordDoc();
+    if (integratedDataDoc) onCloseIntegratedData();
+    if (integratedCollectionDoc) onCloseIntegratedCollection();
+    setOpenedRecoInfoId(null);
+    setOpenedExportEtat(null);
+
+    const path = targetNode ? findNodePath(trees, targetNode.id) || [] : [];
+    const missionNode =
+      targetNode?.planMissionMeta
+        ? targetNode
+        : [...path].reverse().find((p) => Boolean(p.planMissionMeta));
+    const natureNode =
+      targetNode?.nodeType === 'nature' && targetNode.natureId === 'plan-audit'
+        ? targetNode
+        : [...path].reverse().find((p) => p.nodeType === 'nature' && p.natureId === 'plan-audit');
+    const stepNode = targetNode?.planStepMeta?.stepNumber ? targetNode : undefined;
+
+    setOpenedAuditPlanState({
+      mode: panelMode,
+      scopeNodeId: natureNode?.id || targetNode?.id,
+      missionId: missionNode?.id,
+      stepId: stepNode?.id,
+    });
+    if (missionNode && !expandedIds.has(missionNode.id)) {
+      onToggleExpand(missionNode.id);
+    }
+    if (targetNode) {
+      onJumpToNode(targetNode.id);
+    }
+  };
 
   useEffect(() => {
     setUserKeyDraft(session.userApiKey);
@@ -428,6 +640,13 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
           setAddingTarget(null);
         } else if (inspector) {
           setInspector(null);
+        } else if (openedRecoInfoId) {
+          setOpenedRecoInfoId(null);
+          setOpenedRecoScopeId(undefined);
+        } else if (openedAuditPlanState) {
+          setOpenedAuditPlanState(null);
+        } else if (openedExportEtat) {
+          setOpenedExportEtat(null);
         } else {
           onClose();
         }
@@ -459,6 +678,9 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     contextMenu,
     pinPrompt,
     inspector,
+    openedRecoInfoId,
+    openedAuditPlanState,
+    openedExportEtat,
     canUndo,
     canRedo,
     onUndo,
@@ -507,6 +729,9 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     const clampedY = Math.min(y, window.innerHeight - menuHeight - 12);
     setShowNatureSubmenu(false);
     setShowStatusSubmenu(false);
+    setShowExportEtatSubmenu(
+      node?.natureId === 'suivi-recos' || node?.natureId === 'plan-audit'
+    );
     setContextMenu({
       x: Math.max(12, clampedX),
       y: Math.max(12, clampedY),
@@ -728,8 +953,35 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
               type="button"
               disabled={node.nodeType === 'document' && effectivelyLocked}
               onClick={() => {
+                const isRecoNode =
+                  Boolean(node.recoMeta) ||
+                  (node.nodeType === 'sous-section' &&
+                    node.natureId === 'suivi-recos' &&
+                    Boolean(findRecoRecordByRefOrLabel(node.label)));
                 if (node.nodeType === 'document') {
                   if (!effectivelyLocked) onOpenWordDoc(node);
+                } else if (node.natureId === 'plan-audit' && Boolean(node.planMissionMeta)) {
+                  const isAlreadyActiveMission =
+                    openedAuditPlanState?.mode === 'integrale' &&
+                    openedAuditPlanState?.missionId === node.id;
+                  if (isExpanded && isAlreadyActiveMission) {
+                    onToggleExpand(node.id);
+                  } else {
+                    if (!isExpanded) {
+                      onToggleExpand(node.id);
+                    }
+                    openAuditPlanPanel('integrale', node);
+                  }
+                } else if (isRecoNode) {
+                  const isAlreadyActiveReco = openedRecoInfoId === node.id;
+                  if (isExpanded && isAlreadyActiveReco) {
+                    onToggleExpand(node.id);
+                  } else {
+                    if (hasChildren && !isExpanded) {
+                      onToggleExpand(node.id);
+                    }
+                    openRecoInfoPanel(node, 'accordeon');
+                  }
                 } else if (hasChildren) {
                   onToggleExpand(node.id);
                 } else {
@@ -820,6 +1072,29 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                   </span>
                 );
               })()}
+              {node.todoTasks && node.todoTasks.length > 0 && (() => {
+                const doneCount = node.todoTasks.filter((t) => t.status === 'done').length;
+                const hasBlocked = node.todoTasks.some((t) => t.status === 'blocked');
+                return (
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setInspector({ mode: 'todo', nodeId: node.id });
+                    }}
+                    title={`To-do liste (8h/j) : ${doneCount}/${node.todoTasks.length} terminée(s)`}
+                    className={`inline-flex shrink-0 items-center gap-0.5 rounded border px-1 py-0.5 font-mono text-[10px] tabular-nums ${
+                      hasBlocked
+                        ? 'border-red-700/70 bg-red-950/60 text-red-300'
+                        : 'border-teal-700/70 bg-teal-950/60 text-teal-300'
+                    }`}
+                  >
+                    <ListTodo className="h-3 w-3" aria-hidden="true" />
+                    <span>
+                      {doneCount}/{node.todoTasks.length}
+                    </span>
+                  </span>
+                );
+              })()}
               {node.managerReviewed && (
                 <span
                   title="Revue manager effectuée"
@@ -838,6 +1113,33 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
               )}
             </button>
           )}
+
+          {/* Bouton rapide Plan annuel d'audit (Tableau 10 col / Gantt 2 niveaux) */}
+          {!isRenaming &&
+            node.natureId === 'plan-audit' &&
+            (node.nodeType === 'nature' || Boolean(node.planMissionMeta)) && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openAuditPlanPanel(
+                    node.planMissionMeta ? 'gantt-mission' : 'integrer',
+                    node
+                  );
+                }}
+                title={
+                  node.planMissionMeta
+                    ? `Ouvrir le Gantt Niveau 1 & Plan intégral (${node.planMissionMeta.code})`
+                    : 'Ouvrir le Plan annuel d’audit (Tableau 10 colonnes & Gantt)'
+                }
+                className="inline-flex shrink-0 items-center gap-1 rounded border border-teal-700/80 bg-teal-950/80 px-1.5 py-0.5 text-[10px] font-semibold text-teal-300 transition-colors hover:bg-teal-800/80 hover:text-white cursor-pointer"
+              >
+                <CalendarRange className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="hidden sm:inline">
+                  {node.planMissionMeta ? 'Gantt' : 'Plan 2026'}
+                </span>
+              </button>
+            )}
 
           {/* Bouton Parent -> Enfants (Indigo : aller vers références enfants) */}
           {!isRenaming && node.crossRefs && node.crossRefs.length > 0 && (
@@ -993,7 +1295,12 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
         aria-label="Menu coulissant — Workflows documentaires"
         aria-hidden={!isOpen}
         className={`fixed top-0 right-0 z-50 flex h-full w-full flex-col border-l border-slate-800 bg-slate-900 text-slate-100 shadow-2xl transition-[transform,max-width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          openedWordDoc || integratedDataDoc || integratedCollectionDoc
+          openedWordDoc ||
+          integratedDataDoc ||
+          integratedCollectionDoc ||
+          (openedRecoInfoNode && openedRecoInfoRecord) ||
+          openedAuditPlanState ||
+          openedExportEtat
             ? 'max-w-[1360px]'
             : 'max-w-[780px]'
         } ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
@@ -1011,6 +1318,26 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {onOpenSuiviRecosAnalyticsTab && (
+              <button
+                type="button"
+                onClick={onOpenSuiviRecosAnalyticsTab}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-blue-700/70 bg-blue-950/60 px-2.5 py-1.5 text-xs font-medium text-blue-200 transition-colors hover:bg-blue-900/70 whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <BarChart3 className="h-3.5 w-3.5 text-blue-400" aria-hidden="true" />
+                <span>Analytics Recos</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onOpenAuditPlanTab}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-teal-700/70 bg-teal-950/60 px-2.5 py-1.5 text-xs font-medium text-teal-200 transition-colors hover:bg-teal-900/70 whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <ListTodo className="h-3.5 w-3.5 text-teal-400" aria-hidden="true" />
+              <span>Plan d&apos;audit (8h/j)</span>
+            </button>
+
             <button
               type="button"
               onClick={() => setShowStatsDashboard((v) => !v)}
@@ -1806,10 +2133,96 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             />
           )}
 
+          {/* Panneau Détail Suivi des Recos (Accordéon 10 colonnes clés + bouton Détail source 22 colonnes) */}
+          {!openedWordDoc &&
+            !integratedDataDoc &&
+            !integratedCollectionDoc &&
+            openedRecoInfoNode &&
+            openedRecoInfoRecord && (
+              <RecoInfoManagerPanel
+                node={openedRecoInfoNode}
+                record={openedRecoInfoRecord}
+                isLocked={
+                  isNodeLockedOrWithinLockedAncestor(trees, openedRecoInfoNode.id) ||
+                  Boolean(openedRecoInfoNode.locked)
+                }
+                trees={trees}
+                scopeNodeId={openedRecoScopeId}
+                initialView={openedRecoInitialView}
+                onClose={() => {
+                  setOpenedRecoInfoId(null);
+                  setOpenedRecoScopeId(undefined);
+                }}
+                onSelectRecoNode={(recoNodeId) => {
+                  setOpenedRecoInfoId(recoNodeId);
+                  onJumpToNode(recoNodeId);
+                }}
+                onUpdateRecoMeta={onUpdateRecoMeta}
+                onToggleManagerReview={onToggleManagerReview}
+                onSetNodeStatus={onSetNodesStatus}
+                onAddReviewNote={onAddReviewNote}
+                onToggleReviewNote={onToggleReviewNote}
+                onDeleteReviewNote={onDeleteReviewNote}
+                onOpenWordDoc={onOpenWordDoc}
+                onIntegrateCollection={onIntegrateCollection}
+                onExpandBranch={onExpandBranch}
+              />
+            )}
+
+          {/* Panneau Plan annuel d'audit (10 col / Plan intégral / Planif 08h / Gantt 2 niveaux) */}
+          {!openedWordDoc &&
+            !integratedDataDoc &&
+            !integratedCollectionDoc &&
+            !(openedRecoInfoNode && openedRecoInfoRecord) &&
+            openedAuditPlanState && (
+              <AuditPlanWorkflowPanel
+                compact
+                trees={trees}
+                scopeNodeId={openedAuditPlanState.scopeNodeId}
+                initialMode={openedAuditPlanState.mode}
+                initialMissionId={openedAuditPlanState.missionId}
+                initialStepId={openedAuditPlanState.stepId}
+                userSignature={session.userSignature}
+                onClose={() => setOpenedAuditPlanState(null)}
+                onInjectPlanMissions={onInjectPlanMissions}
+                onUpdateStepDates={onUpdatePlanStepDates}
+                onUpdateMissionMeta={onUpdatePlanMissionMeta}
+                onAddTodoTask={onAddTodoTask}
+                onUpdateTodoTask={onUpdateTodoTask}
+                onDeleteTodoTask={onDeleteTodoTask}
+                onJumpToNode={onJumpToNode}
+              />
+            )}
+
+          {/* Fenêtre Exportation États (Suivi des recos & Plan d'audit : Tables Excel & Dashboards PDF) */}
+          {!openedWordDoc &&
+            !integratedDataDoc &&
+            !integratedCollectionDoc &&
+            !(openedRecoInfoNode && openedRecoInfoRecord) &&
+            !openedAuditPlanState &&
+            openedExportEtat && (
+              <ExportEtatsPanel
+                key={openedExportEtat.nonce}
+                trees={trees}
+                wordBodies={wordBodies}
+                initialActivity={openedExportEtat.activity}
+                initialMode={openedExportEtat.mode}
+                scopeNodeId={openedExportEtat.scopeNodeId}
+                clientName={session.client}
+                userSignature={session.userSignature}
+                onClose={() => setOpenedExportEtat(null)}
+              />
+            )}
+
           {/* Arborescence Workflow & Team Workflow + Inspecteur contextuel */}
           <div
             className={`flex min-h-0 flex-col overflow-hidden ${
-              openedWordDoc || integratedDataDoc || integratedCollectionDoc
+              openedWordDoc ||
+              integratedDataDoc ||
+              integratedCollectionDoc ||
+              (openedRecoInfoNode && openedRecoInfoRecord) ||
+              openedAuditPlanState ||
+              openedExportEtat
                 ? 'min-h-[180px] shrink-0 lg:w-[410px] lg:flex-none'
                 : 'flex-1'
             }`}
@@ -1834,6 +2247,12 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                 onAddCrossRef={onAddCrossRef}
                 onRemoveCrossRef={onRemoveCrossRef}
                 onAssignNodes={onAssignNodes}
+                onAddTodoTask={onAddTodoTask}
+                onUpdateTodoTask={onUpdateTodoTask}
+                onDeleteTodoTask={onDeleteTodoTask}
+                onClockInTodoTask={onClockInTodoTask}
+                onClockOutTodoTask={onClockOutTodoTask}
+                onOpenFullAuditPlan={onOpenAuditPlanTab}
               />
             )}
 
@@ -1880,6 +2299,165 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                 : contextMenu.node.label
               : 'Arborescence des Workflows'}
           </div>
+
+          {/* Bloc Métriques liées au nœud & workflow dans le menu contextuel */}
+          {(() => {
+            const ctxMetrics = computeContextualWorkflowMetrics(contextMenu.node, trees);
+            return (
+              <div className="border-b border-slate-800 bg-slate-950/70 px-3 py-2 text-[10px]">
+                <div className="flex items-center justify-between gap-2 text-slate-400">
+                  <span className="font-semibold uppercase tracking-wider text-sky-400">
+                    Métriques liées
+                  </span>
+                  <span className="font-mono font-semibold text-white tabular-nums">
+                    {ctxMetrics.primaryPct}% avancement
+                  </span>
+                </div>
+                {ctxMetrics.mode === 'plan-audit' ? (
+                  <div className="mt-1.5 grid grid-cols-3 gap-1.5 font-mono tabular-nums">
+                    <div className="rounded border border-slate-800 bg-slate-900 px-1.5 py-1">
+                      <div className="text-[9px] text-slate-400">Missions</div>
+                      <div className="text-slate-100">{ctxMetrics.missionsCount}</div>
+                    </div>
+                    <div className="rounded border border-slate-800 bg-slate-900 px-1.5 py-1">
+                      <div className="text-[9px] text-slate-400">Retard / Avance</div>
+                      <div>
+                        <span className="text-red-400">{ctxMetrics.lateCount}R</span>{' '}
+                        <span className="text-emerald-400">{ctxMetrics.normalCount}N</span>{' '}
+                        <span className="text-sky-400">{ctxMetrics.aheadCount}A</span>
+                      </div>
+                    </div>
+                    <div className="rounded border border-slate-800 bg-slate-900 px-1.5 py-1">
+                      <div className="text-[9px] text-slate-400">Écart 08h/j</div>
+                      <div
+                        className={
+                          ctxMetrics.varianceHours > 0
+                            ? 'text-red-400'
+                            : ctxMetrics.varianceHours < 0
+                            ? 'text-sky-400'
+                            : 'text-emerald-400'
+                        }
+                      >
+                        {ctxMetrics.varianceHours > 0
+                          ? `+${ctxMetrics.varianceHours}h`
+                          : `${ctxMetrics.varianceHours}h`}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-1.5 grid grid-cols-3 gap-1.5 font-mono tabular-nums">
+                    <div className="rounded border border-slate-800 bg-slate-900 px-1.5 py-1">
+                      <div className="text-[9px] text-slate-400">Docs validés</div>
+                      <div className="text-slate-100">
+                        {ctxMetrics.validatedDocs}/{ctxMetrics.docsCount}
+                      </div>
+                    </div>
+                    <div className="rounded border border-slate-800 bg-slate-900 px-1.5 py-1">
+                      <div className="text-[9px] text-slate-400">Tâches 08h/j</div>
+                      <div className="text-slate-100">
+                        {ctxMetrics.tasksCount} ({ctxMetrics.plannedHours}h)
+                      </div>
+                    </div>
+                    <div className="rounded border border-slate-800 bg-slate-900 px-1.5 py-1">
+                      <div className="text-[9px] text-slate-400">Alertes / Notes</div>
+                      <div className="text-amber-300">
+                        {ctxMetrics.overdueCount} éch. · {ctxMetrics.openNotes}n
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Actions spécifiques Workflow Plan annuel d'audit */}
+          {(() => {
+            const ctxNode = contextMenu.node;
+            const showPlanMenu =
+              !ctxNode ||
+              ctxNode.natureId === 'plan-audit' ||
+              ctxNode.nodeType === 'exercice' ||
+              ctxNode.nodeType === 'root';
+            if (!showPlanMenu) return null;
+
+            return (
+              <div className="border-b border-teal-800/60 bg-teal-950/20 py-1">
+                <div className="flex items-center justify-between gap-2 px-3 py-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-teal-300">
+                    Plan annuel d&apos;audit
+                  </span>
+                  <span className="font-mono text-[10px] text-teal-300/80">
+                    2026 · 08h/j
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openAuditPlanPanel('integrer', ctxNode);
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                >
+                  <FileSpreadsheet className="h-3.5 w-3.5 text-teal-400" aria-hidden="true" />
+                  <span>Intégrer le plan d&apos;audit (10 col. / 12 missions)</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openAuditPlanPanel('integrale', ctxNode);
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                >
+                  <FolderKanban className="h-3.5 w-3.5 text-teal-400" aria-hidden="true" />
+                  <span>Plan d&apos;audit intégrale (Détails mission)</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openAuditPlanPanel('planification', ctxNode);
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                >
+                  <ListTodo className="h-3.5 w-3.5 text-teal-400" aria-hidden="true" />
+                  <span>Planification des tâches (Écarts auto)</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openAuditPlanPanel('gantt-mission', ctxNode);
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                >
+                  <Layers className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                  <span>Gantt par Mission (Phase/Étape/Auditeur)</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openAuditPlanPanel('gantt-annuel', ctxNode);
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                >
+                  <GanttChart className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                  <span>Gantt Plan annuel d&apos;audit (2026)</span>
+                </button>
+              </div>
+            );
+          })()}
 
           <div className="py-1">
             <button
@@ -2213,6 +2791,187 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             );
           })()}
 
+          {/* Section dédiée 27 : Exportation États (Suivi des recos & Plan d'audit -> Table Excel / Dashboard PDF) */}
+          <div className="border-b border-emerald-800/50 bg-emerald-950/15 py-1">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => setShowExportEtatSubmenu((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+            >
+              <span className="flex items-center gap-2.5">
+                <Download className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                <span className="font-semibold text-emerald-300">Exporter état</span>
+              </span>
+              <ChevronRight
+                className={`h-3.5 w-3.5 text-slate-400 transition-transform ${
+                  showExportEtatSubmenu ? 'rotate-90' : ''
+                }`}
+                aria-hidden="true"
+              />
+            </button>
+
+            {showExportEtatSubmenu && (
+              <div className="mx-2 my-1 space-y-1.5 rounded-lg border border-slate-800 bg-slate-950 p-1.5">
+                {/* Branche Suivi des recos */}
+                <div>
+                  <div className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300">
+                    Suivi des recos
+                  </div>
+                  <div className="mt-0.5 space-y-0.5 pl-1">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        openExportEtatPanel('suivi-recos', 'table', contextMenu.node);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                        <span>Table</span>
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">.xlsx</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        openExportEtatPanel('suivi-recos', 'dashboard', contextMenu.node);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <BarChart3 className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                        <span>Dashboard</span>
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">.pdf</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Branche Plan d'audit */}
+                <div className="border-t border-slate-800/80 pt-1">
+                  <div className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-teal-300">
+                    Plan d’audit
+                  </div>
+                  <div className="mt-0.5 space-y-0.5 pl-1">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        openExportEtatPanel('plan-audit', 'table', contextMenu.node);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                        <span>Table</span>
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">.xlsx</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        openExportEtatPanel('plan-audit', 'dashboard', contextMenu.node);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <GanttChart className="h-3.5 w-3.5 text-teal-400" aria-hidden="true" />
+                        <span>Dashboard</span>
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">.pdf</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Branche Document */}
+                <div className="border-t border-slate-800/80 pt-1">
+                  <div className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-300">
+                    Document
+                  </div>
+                  <div className="mt-0.5 space-y-0.5 pl-1">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        openExportEtatPanel('document', 'docx', contextMenu.node);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <FileText className="h-3.5 w-3.5 text-indigo-400" aria-hidden="true" />
+                        <span>Document Word</span>
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">.docx</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        openExportEtatPanel('document', 'pdf', contextMenu.node);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <FileText className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                        <span>Document PDF</span>
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">.pdf</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Branche Étape de mission */}
+                <div className="border-t border-slate-800/80 pt-1">
+                  <div className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-300">
+                    Étape de mission
+                  </div>
+                  <div className="mt-0.5 space-y-0.5 pl-1">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        openExportEtatPanel('etape-mission', 'docx', contextMenu.node);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <GanttChart className="h-3.5 w-3.5 text-indigo-400" aria-hidden="true" />
+                        <span>Dossier Word</span>
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">.docx</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        openExportEtatPanel('etape-mission', 'pdf', contextMenu.node);
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <GanttChart className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                        <span>Dossier PDF</span>
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">.pdf</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           {contextMenu.node && (() => {
             const ctxNode = contextMenu.node;
             const nodeEffectivelyLocked = isNodeLockedOrWithinLockedAncestor(trees, ctxNode.id);
@@ -2292,6 +3051,48 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
               <div className="border-t border-slate-800 py-1">
                 {ctxNode.nodeType !== 'root' && (
                   <>
+                    {(ctxNode.recoMeta ||
+                      (ctxNode.nodeType === 'sous-section' &&
+                        ctxNode.natureId === 'suivi-recos' &&
+                        findRecoRecordByRefOrLabel(ctxNode.label))) && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          openRecoInfoPanel(ctxNode, 'accordeon');
+                          setContextMenu(null);
+                        }}
+                        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sky-300 hover:bg-slate-800 hover:text-white cursor-pointer"
+                      >
+                        <Info className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                        <span>Détail du suivi (Accordéon 10 col.)</span>
+                      </button>
+                    )}
+
+                    {ctxNode.natureId === 'suivi-recos' && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          const isDirectReco = Boolean(
+                            ctxNode.recoMeta ||
+                              (ctxNode.nodeType === 'sous-section' &&
+                                findRecoRecordByRefOrLabel(ctxNode.label))
+                          );
+                          openRecoInfoPanel(
+                            ctxNode,
+                            'source-file',
+                            isDirectReco ? undefined : ctxNode.id
+                          );
+                          setContextMenu(null);
+                        }}
+                        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-amber-300 hover:bg-slate-800 hover:text-white cursor-pointer"
+                      >
+                        <Table2 className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
+                        <span>Détail informations sources (22 col.)</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       role="menuitem"
@@ -2740,6 +3541,25 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                     >
                       <UserPlus className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
                       <span>Assigner / Échéance</span>
+                    </button>
+
+                    {/* Point 25 : To-do liste & Suivi temps (08h/j) */}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setInspector({ mode: 'todo', nodeId: ctxNode.id });
+                        setContextMenu(null);
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                    >
+                      <ListTodo className="h-3.5 w-3.5 text-teal-400" aria-hidden="true" />
+                      <span>
+                        To-do liste &amp; Suivi temps (08h/j)
+                        {ctxNode.todoTasks && ctxNode.todoTasks.length > 0
+                          ? ` (${ctxNode.todoTasks.length})`
+                          : ''}
+                      </span>
                     </button>
 
                     {/* Point 8 : Journal de traçabilité */}

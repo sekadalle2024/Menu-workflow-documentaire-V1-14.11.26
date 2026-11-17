@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Suivi des recommandations d’audit</title>
+<style>
+:root{--bg:#eceef2;--sf:#fff;--tx:#1f2430;--mu:#6b7385;--bd:#dde1e8;--ac:#0f4c81;--R:#1f9d6b;--A:#3b82f6;--P:#f0a020;--N:#e0454f;--C:#d63c4a;--J:#ef8a2e;--O:#e8c545;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14171d;--sf:#1e232c;--tx:#e8ebf0;--mu:#9099ab;--bd:#2f3642;--ac:#5ba3e0}}
+:root[data-theme="dark"]{--bg:#14171d;--sf:#1e232c;--tx:#e8ebf0;--mu:#9099ab;--bd:#2f3642;--ac:#5ba3e0}
+html{color-scheme:light dark;scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.4 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
+header{background:var(--hd,#12263f);color:#fff;padding:16px 22px 18px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;border-bottom:3px solid var(--hl,#f2c811)}
+.th{flex:0 0 190px!important;margin-left:auto}
+:root[data-theme="ocean"]{color-scheme:light;--bg:#e4eef4;--sf:#fff;--tx:#17303f;--mu:#5d7686;--bd:#cfdde6;--ac:#0b6e99;--hd:#0a3d5c;--hl:#35c2d6}
+:root[data-theme="foret"]{color-scheme:light;--bg:#e8efe9;--sf:#fff;--tx:#1d2f24;--mu:#62786a;--bd:#d3dfd6;--ac:#2e7d4f;--hd:#16382a;--hl:#9bd46a}
+:root[data-theme="prune"]{color-scheme:light;--bg:#f1eaf3;--sf:#fff;--tx:#2b1d33;--mu:#7a6885;--bd:#e0d3e6;--ac:#7b3fa0;--hd:#2e1745;--hl:#e58fd0}
+:root[data-theme="graphite"]{color-scheme:dark;--bg:#101114;--sf:#1a1c21;--tx:#e6e7ea;--mu:#9a9ea8;--bd:#2c2f36;--ac:#f2c811;--hd:#000;--hl:#f2c811}
+header h1{margin:0;font-size:19px;font-weight:600}
+header small{color:#9fb6d3;display:block;font-size:12px;margin-top:2px}
+header label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:#9fb6d3;flex:1 1 150px;min-width:0}
+header label:first-child{flex:2 1 220px}
+.f{display:flex;flex-wrap:wrap;gap:10px;flex-basis:100%;align-items:flex-end}
+select,input{font:inherit;width:100%;padding:8px 10px;border-radius:4px;border:1px solid #36557c;background:#1b3556;color:#fff}
+input::placeholder{color:#8aa3c2}
+select:focus,input:focus,button:focus-visible{outline:2px solid #f2c811;outline-offset:1px}
+button{font:inherit;font-weight:600;padding:8px 16px;border-radius:4px;border:0;background:var(--hl,#f2c811);color:#12263f;cursor:pointer}
+.tr u{min-width:2px}
+main{padding:16px 22px;display:grid;gap:14px;max-width:1500px;margin:auto}
+.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+.c{background:var(--sf);border:1px solid var(--bd);border-radius:6px;padding:14px;min-width:0}
+.kp{border-left:4px solid var(--ac)}
+.kp b{display:block;font-size:30px;font-weight:600;line-height:1.1}
+.kp span{color:var(--mu);font-size:12px}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:14px}
+h2{margin:0 0 10px;font-size:14px;font-weight:600}
+.dn{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.ring{width:150px;height:150px;border-radius:50%;display:grid;place-items:center;flex:none}
+.ring i{width:96px;height:96px;border-radius:50%;background:var(--sf);display:grid;place-items:center;font:600 22px "Segoe UI",sans-serif;font-style:normal}
+.lg div{cursor:pointer;padding:2px 0;display:flex;gap:6px;align-items:center}
+.lg em{width:10px;height:10px;border-radius:2px;display:inline-block}
+.br{display:grid;grid-template-columns:minmax(90px,150px) 1fr 28px;gap:8px;align-items:center;margin:5px 0;cursor:pointer;font-size:12px}
+.br>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tr{display:flex;height:14px;border-radius:2px;overflow:hidden;background:var(--bd)}
+.tr u{display:block}
+.hm{display:grid;grid-template-columns:70px repeat(4,1fr);gap:4px;text-align:center;font-size:12px}
+.hm div{padding:12px 4px;border-radius:4px}
+.hm .h{padding:4px;color:var(--mu)}
+.tw{overflow-x:auto;max-height:480px;overflow-y:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{position:sticky;top:0;background:var(--sf);text-align:left;padding:8px;border-bottom:2px solid var(--bd);color:var(--mu);font-weight:600}
+td{padding:7px 8px;border-bottom:1px solid var(--bd)}
+.p{padding:2px 8px;border-radius:10px;color:#fff;font-size:11.5px;white-space:nowrap}
+.late{color:var(--N);font-weight:600}
+.chip{background:var(--bd);border-radius:10px;padding:2px 8px;cursor:pointer;margin-left:6px;font-size:12px}
+</style>
+</head>
+<body>
+<header>
+<div><h1>Suivi des recommandations d’audit</h1><small id="sub"></small></div>
+<label class="th">Thème du tableau de bord<select id="th"></select></label>
+<div class="f">
+<label>Recherche<input id="q" placeholder="Mot de l’intitulé"></label>
+<label>Statut<select id="fs"></select></label>
+<label>Niveau de risque<select id="fe"></select></label>
+<label>Direction<select id="fd"></select></label>
+<label>Cycle<select id="fc"></select></label>
+<button id="rs">Réinitialiser</button>
+</div>
+</header>
+<main>
+<div class="k" id="k"></div>
+<div class="g">
+<div class="c"><h2>Répartition par statut</h2><div class="dn"><div class="ring" id="ring"><i id="pct"></i></div><div class="lg" id="lg"></div></div></div>
+<div class="c"><h2>Risque × statut</h2><div class="hm" id="hm"></div></div>
+<div class="c"><h2>Avancement par cycle</h2><div id="bc"></div></div>
+</div>
+<div class="g" style="grid-template-columns:repeat(auto-fit,minmax(420px,1fr))">
+<div class="c"><h2>Avancement par direction</h2><div id="bd"></div></div>
+<div class="c"><h2>Échéances par mois (délai initial ou reporté)</h2><div id="mo"></div></div>
+</div>
+<div class="c"><h2>Détail des recommandations <span id="cnt" style="color:var(--mu);font-weight:400"></span></h2>
+<div class="tw"><table><thead><tr><th>N°</th><th>Recommandation</th><th>Cycle</th><th>Direction</th><th>Risque</th><th>Statut</th><th>Échéance</th><th>Report</th></tr></thead><tbody id="tb"></tbody></table></div></div>
+</main>
+<script>
+const D=["Audit Interne","Réseau & Agences","Financière & Comptable","Achats & Logistique","Commerciale","Ressources Humaines","Moyens Généraux","Juridique","Systèmes d’Information","Risques","Engagements","Technique","Opérations","Conformité","Contrôle Permanent"];
+const CY=["Trésorerie","Achats","Ventes","Paie & RH","Immobilisations","Stocks","Comptabilité","Crédits","Systèmes d’Information","Gouvernance & Conformité"];
+const ST={R:["Réalisé","var(--R)"],A:["En attente","var(--A)"],P:["Reporté","var(--P)"],N:["Non réalisé","var(--N)"]};
+const EV={C:["Critique","var(--C)"],J:["Majeur","var(--J)"],O:["Modéré","var(--O)"]};
+const RAW=`Absence de note de cadrage|C|R|0|31/03|
+Arrêté de caisse sans visa superviseur|J|R|1|15/04|
+Excédents de caisse non comptabilisés|O|A|2|30/05|
+Dépassement du plafond d’encaisse|C|P|2|30/04|30/06
+Dépenses de caisse sans justificatifs|C|N|2|15/05|
+Suspens anciens du compte 581|J|A|2|31/05|
+Retards des rapprochements bancaires|J|R|2|31/03|
+Accès au coffre-fort non séparés|C|R|2|28/02|
+Chèques non endossés et remis hors délai|J|P|2|30/06|30/09
+Fractionnement de commandes|C|N|3|30/04|
+Réception sans bon de réception signé|J|R|3|31/03|
+Doublons dans la base fournisseurs|J|A|3|15/05|
+Mentions fiscales des factures non contrôlées|J|R|2|31/03|
+Doubles paiements sur factures proforma|C|R|2|28/02|
+Avances fournisseurs anciennes (4091)|J|N|2|30/04|
+Contrats de sous-traitance sans mise en concurrence|O|P|3|31/05|30/08
+Retenue à la source omise (non-résidents)|C|R|2|31/03|
+Factures non parvenues sous-évaluées|J|R|2|30/04|
+Expéditions non facturées et ruptures de BL|C|A|4|30/05|
+Livraisons au-delà des plafonds de crédit|C|R|4|31/03|
+Avoirs commerciaux sans validation|C|N|4|15/04|
+Créances anciennes non provisionnées|J|R|2|31/03|
+Remises exceptionnelles non encadrées|J|P|4|30/04|30/06
+Ventes comptabilisées avant transfert de propriété|J|R|2|28/02|
+Écart entre encaissements caisse et ventes|C|A|2|15/05|
+Lettrage insuffisant du compte 411|O|R|2|31/03|
+Absence de circularisation des grands comptes|O|N|2|30/04|
+Salaires maintenus après départ|C|R|5|31/03|
+Virement de paie sans contrôle indépendant|C|R|5|28/02|
+Heures supplémentaires sans pointage|J|P|5|30/04|31/07
+Dossiers du personnel incomplets|O|A|5|31/05|
+Avances au personnel non récupérées|O|R|5|31/03|
+Erreurs d’assiette ITS et CNPS|J|N|5|30/04|
+Rapprochement paie / comptabilité absent|J|A|2|15/05|
+Congés payés non provisionnés|O|R|5|28/02|
+Salaires journaliers payés en espèces|C|A|5|30/05|
+Pas d’inventaire physique des immobilisations|J|R|6|31/03|
+Cessions et rebuts non sortis du bilan|J|R|2|28/02|
+Approche par composants non appliquée|O|P|11|30/04|31/07
+Charges d’entretien immobilisées à tort|J|N|2|15/04|
+Immobilisations en cours dormantes|C|A|2|15/05|
+Actifs critiques sans couverture d’assurance|C|R|6|28/02|
+Titres fonciers non sécurisés|J|R|7|31/03|
+Écart fichier immobilisations / balance|O|R|2|31/03|
+Dépassement du budget d’investissement|J|N|2|30/04|
+Écarts à l’inventaire physique des stocks|C|A|3|30/05|
+Accès libre aux entrepôts|J|R|3|31/03|
+Stocks obsolètes non dépréciés|J|P|3|30/04|31/07
+Erreur de valorisation des stocks (CUMP)|C|R|2|31/03|
+Sorties internes de stock non documentées|J|N|3|15/04|
+Inventaire sans séparation des tâches|J|A|2|31/05|
+Stock en transit non justifié (38)|C|R|2|28/02|
+Pas de contrôle qualité à la réception|J|R|11|31/03|
+Ruptures sur pièces de rechange critiques|J|A|11|15/05|
+Soldes non justifiés du compte 471|C|A|2|15/05|
+Opérations diverses sans justificatif|C|R|2|31/03|
+Écarts entre déclarations TVA et chiffre d’affaires|C|R|2|31/03|
+Manuel de procédures obsolète|J|N|2|30/04|
+Retard dans l’arrêté des comptes mensuels|O|A|2|31/05|
+Charges constatées d’avance non rattachées|O|R|2|28/02|
+Dettes fiscales (44) non justifiées|J|R|2|31/03|
+Notes annexes SYSCOHADA incomplètes|J|P|2|30/04|30/05
+Archives comptables non sécurisées|J|N|2|15/04
+Crédits octroyés sans dossier complet|C|A|10|15/05|
+Garanties hypothécaires non inscrites|C|A|10|31/05|
+Créances impayées non déclassées (BCEAO)|C|R|9|31/03|
+Levée de blocage irrégulière de comptes dormants|C|R|12|28/02|
+Concentration excessive sur un groupe|C|P|9|30/04|31/07
+Expertises de garanties obsolètes|J|A|9|30/06|
+Forçages manuels de découverts|J|N|1|15/04|
+Suivi post-financement des crédits PME|O|A|4|31/05|
+Dossiers contentieux sans rapprochement|J|R|7|31/03|
+Droits incompatibles dans l’ERP (SoD)|C|R|8|28/02|
+Comptes d’anciens employés actifs|C|P|8|30/04|30/06
+Pas de test de restauration des sauvegardes|C|R|8|31/03|
+Mots de passe faibles et comptes partagés|C|A|8|15/05|
+Journalisation ERP désactivée|C|N|8|15/04|
+Accès physique à la salle serveurs|J|R|8|31/03|
+Gestion des changements IT non formalisée|J|A|8|31/05|
+Licences logicielles non conformes|O|A|8|15/05|
+Plan de continuité d’activité absent|C|P|8|30/05|30/09
+Vigilance LBC-FT et KYC défaillante|C|R|13|31/03|
+Plan d’audit sans cartographie des risques|C|R|0|28/02|
+Surveillance permanente non structurée|J|A|14|30/05|
+Délégations de signatures bancaires obsolètes|C|R|2|28/02|
+Suivi des recommandations d’audit absent|J|R|0|31/03|
+Coordination Audit / Contrôle permanent|J|R|0|31/03|
+Litiges majeurs non provisionnés|J|N|7|15/04|
+Non-conformité ARTCI (données personnelles)|O|P|7|30/04|30/07
+Pas de dispositif d’alerte éthique|J|A|0|30/06|`;
+const dt=s=>{if(!s)return null;const[a,b]=s.split("/");return new Date(2025,b-1,+a)};
+const R=RAW.split("\n").map((l,i)=>{const f=l.split("|");return{n:i+1,t:f[0],e:f[1],s:f[2],d:+f[3],dl:f[4],rp:f[5]||"",cy:Math.floor(i/9)}});
+const now=new Date();now.setHours(0,0,0,0);
+R.forEach(r=>{r.eff=dt(r.rp||r.dl);r.late=r.s!="R"&&r.eff<now;r.days=Math.round((now-r.eff)/864e5)});
+const F={s:"",e:"",d:"",c:"",q:""};
+const $=id=>document.getElementById(id);
+const fill=(id,lab,o)=>{$(id).innerHTML=`<option value="">${lab}</option>`+o.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")};
+fill("fs","Tous les statuts",Object.entries(ST).map(([k,v])=>[k,v[0]]));
+fill("fe","Tous les risques",Object.entries(EV).map(([k,v])=>[k,v[0]]));
+fill("fd","Toutes les directions",D.map((t,i)=>[i,t]));
+fill("fc","Tous les cycles",CY.map((t,i)=>[i,t]));
+const sync=()=>{$("fs").value=F.s;$("fe").value=F.e;$("fd").value=F.d;$("fc").value=F.c;$("q").value=F.q};
+const set=(k,v)=>{F[k]=String(F[k])===String(v)?"":v;sync();draw()};
+[["fs","s"],["fe","e"],["fd","d"],["fc","c"]].forEach(([i,k])=>$(i).onchange=ev=>{F[k]=ev.target.value;draw()});
+$("q").oninput=ev=>{F.q=ev.target.value.toLowerCase();draw()};
+$("rs").onclick=()=>{Object.keys(F).forEach(k=>F[k]="");sync();draw()};
+const pass=(r,skip)=>(skip=="s"||!F.s||r.s==F.s)&&(skip=="e"||!F.e||r.e==F.e)&&(skip=="d"||F.d===""||r.d==F.d)&&(skip=="c"||F.c===""||r.cy==F.c)&&(!F.q||r.t.toLowerCase().includes(F.q));
+const cnt=(a,f)=>a.filter(f).length;
+const stack=(a)=>["R","A","P","N"].map(k=>[k,cnt(a,r=>r.s==k)]);
+function bars(id,keys,names,fld,mx){
+ $(id).innerHTML=keys.map(k=>{const a=R.filter(r=>pass(r,fld)&&r[fld]==k);if(!a.length&&F[fld]==="")return"";
+ return`<div class="br" data-k="${k}"><span title="${names[k]}">${names[k]}</span><div class="tr" style="width:${a.length/mx*100}%;min-width:4px">${stack(a).map(([s,c])=>c?`<u style="flex:${c};background:${ST[s][1]}" title="${ST[s][0]} : ${c}"></u>`:"").join("")}</div><b>${a.length}</b></div>`}).join("");
+ $(id).querySelectorAll(".br").forEach(el=>el.onclick=()=>set(fld=="cy"?"c":"d",el.dataset.k));
+}
+function draw(){
+ const a=R.filter(r=>pass(r));const n=a.length||1;
+ const done=cnt(a,r=>r.s=="R"),late=cnt(a,r=>r.late),crit=cnt(a,r=>r.e=="C"&&r.s!="R"),rep=cnt(a,r=>r.rp);
+ $("sub").textContent=`${R.length} recommandations suivies · situation au ${now.toLocaleDateString("fr-FR")}`;
+ $("k").innerHTML=[["Recommandations",a.length,"dans la sélection"],["Taux de réalisation",Math.round(done/n*100)+"%",done+" réalisées"],["En retard",late,"échéance dépassée, non réalisées"],["Critiques ouvertes",crit,"risque critique non réalisé"],["Reports",rep,"délai prolongé"]].map(([t,v,s])=>`<div class="c kp"><span>${t}</span><b>${v}</b><span>${s}</span></div>`).join("");
+ let acc=0;const cg=stack(a).map(([k,c])=>{const s=acc;acc+=c/n*100;return`${ST[k][1]} ${s}% ${acc}%`}).join(",");
+ $("ring").style.background=`conic-gradient(${cg||"var(--bd) 0 100%"})`;$("pct").textContent=Math.round(done/n*100)+"%";
+ $("lg").innerHTML=stack(R.filter(r=>pass(r,"s"))).map(([k,c])=>`<div data-k="${k}"><em style="background:${ST[k][1]}"></em>${ST[k][0]} <b>${c}</b>${F.s==k?'<span class="chip">filtre ×</span>':""}</div>`).join("");
+ $("lg").querySelectorAll("div").forEach(el=>el.onclick=()=>set("s",el.dataset.k));
+ const hb=R.filter(r=>pass(r,"e")&&pass(r,"s")||false);
+ const base=R.filter(r=>(F.d===""||r.d==F.d)&&(F.c===""||r.cy==F.c)&&(!F.q||r.t.toLowerCase().includes(F.q)));
+ let h='<div class="h"></div>'+Object.keys(ST).map(k=>`<div class="h">${ST[k][0]}</div>`).join("");
+ Object.keys(EV).forEach(e=>{h+=`<div class="h" style="text-align:left;padding-top:12px">${EV[e][0]}</div>`+Object.keys(ST).map(s=>{const c=cnt(base,r=>r.e==e&&r.s==s);return`<div data-e="${e}" data-s="${s}" style="background:${EV[e][1]};opacity:${c?0.25+Math.min(c,12)/16:0.1};color:#000;cursor:pointer;font-weight:600">${c}</div>`}).join("")});
+ $("hm").innerHTML=h;
+ $("hm").querySelectorAll("[data-e]").forEach(el=>el.onclick=()=>{F.e=el.dataset.e;F.s=el.dataset.s;sync();draw()});
+ bars("bc",CY.map((_,i)=>i),CY,"cy",10);
+ bars("bd",D.map((_,i)=>i),D,"d",Math.max(...D.map((_,i)=>cnt(R,r=>r.d==i))));
+ const mo={};a.forEach(r=>{const k=r.eff.getMonth();(mo[k]=mo[k]||[]).push(r)});
+ const names=["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+ const mm=Object.keys(mo).map(Number).sort((x,y)=>x-y);const mx=Math.max(1,...mm.map(k=>mo[k].length));
+ $("mo").innerHTML=mm.map(k=>`<div class="br" style="cursor:default;grid-template-columns:70px 1fr 28px"><span>${names[k]} 2025</span><div class="tr" style="width:${mo[k].length/mx*100}%">${stack(mo[k]).map(([s,c])=>c?`<u style="flex:${c};background:${ST[s][1]}" title="${ST[s][0]} : ${c}"></u>`:"").join("")}</div><b>${mo[k].length}</b></div>`).join("")||"Aucune donnée";
+ $("cnt").textContent=`(${a.length})`;
+ $("tb").innerHTML=a.map(r=>`<tr><td>${r.n}</td><td>${r.t}</td><td>${CY[r.cy]}</td><td>${D[r.d]}</td><td><span class="p" style="background:${EV[r.e][1]};color:#000">${EV[r.e][0]}</span></td><td><span class="p" style="background:${ST[r.s][1]}">${ST[r.s][0]}</span></td><td class="${r.late&&!r.rp?"late":""}">${r.dl}/2025</td><td class="${r.late&&r.rp?"late":""}">${r.rp?r.rp+"/2025":"–"}</td></tr>`).join("")||'<tr><td colspan="8">Aucune recommandation ne correspond aux filtres.</td></tr>';
+}
+const TH=[["","Automatique"],["light","Clair"],["dark","Sombre"],["ocean","Océan"],["foret","Forêt"],["prune","Prune"],["graphite","Graphite"]];
+$("th").innerHTML=TH.map(([v,t])=>`<option value="${v}">${t}</option>`).join("");
+const applyTheme=v=>{v?document.documentElement.dataset.theme=v:document.documentElement.removeAttribute("data-theme");$("th").value=v};
+$("th").onchange=ev=>{applyTheme(ev.target.value);try{localStorage.setItem("recos-theme",ev.target.value)}catch(e){}};
+try{applyTheme(localStorage.getItem("recos-theme")||"")}catch(e){applyTheme("")}
+draw();
+</script>
+</body>
+</html>

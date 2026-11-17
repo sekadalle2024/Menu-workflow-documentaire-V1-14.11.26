@@ -4,6 +4,7 @@ import {
   BookOpen,
   Briefcase,
   Building2,
+  CalendarRange,
   ChevronDown,
   ChevronRight,
   FileSpreadsheet,
@@ -37,6 +38,8 @@ function renderWorkflowIcon(iconKey: string, isActive: boolean) {
       return <Briefcase className={cls} aria-hidden="true" />;
     case 'list-checks':
       return <ListChecks className={cls} aria-hidden="true" />;
+    case 'calendar-range':
+      return <CalendarRange className={cls} aria-hidden="true" />;
     case 'shield-check':
       return <ShieldCheck className={cls} aria-hidden="true" />;
     case 'file-spreadsheet':
@@ -62,7 +65,7 @@ export const LeftWorkflowSidebar: React.FC<LeftWorkflowSidebarProps> = ({
   onActivateWorkflowNature,
 }) => {
   const [openMenus, setOpenMenus] = useState<Set<WorkflowNatureId>>(
-    () => new Set<WorkflowNatureId>(['perm-audit', 'ex-audit', 'doc-mission'])
+    () => new Set<WorkflowNatureId>(['perm-audit', 'ex-audit', 'plan-audit', 'doc-mission'])
   );
 
   const toggleMenu = (id: WorkflowNatureId) => {

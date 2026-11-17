@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  AlertOctagon,
   AlertTriangle,
   ArrowDownRight,
   CalendarClock,
@@ -7,16 +8,30 @@ import {
   CheckCircle2,
   ClipboardList,
   CornerLeftUp,
+  ExternalLink,
   History,
   Link2,
+  ListTodo,
   MessageSquareWarning,
+  Play,
   RotateCcw,
   ShieldAlert,
+  Square,
   Trash2,
   UserPlus,
   X,
 } from 'lucide-react';
-import { WorkflowTreeNode } from '../types/workflow';
+import {
+  MethodologyAssessment,
+  MissionTodoTask,
+  WorkflowTreeNode,
+} from '../types/workflow';
+import {
+  CRIPP_STANDARDS,
+  DEFAULT_AUDITOR_PROFILES,
+  getMondayOfCurrentWeek,
+  snapToWorkingDay,
+} from '../utils/auditTodoOps';
 import {
   AuditReadinessReport,
   buildParentCrossRefMap,
@@ -30,7 +45,8 @@ export type NodeInspectorMode =
   | 'crossrefs'
   | 'assign'
   | 'audit'
-  | 'readiness';
+  | 'readiness'
+  | 'todo';
 
 export interface NodeInspectorState {
   mode: NodeInspectorMode;
@@ -55,6 +71,30 @@ interface WorkflowNodeInspectorProps {
   onAddCrossRef: (sourceId: string, targetRefId: string) => void;
   onRemoveCrossRef: (sourceId: string, targetRefId: string) => void;
   onAssignNodes: (targetIds: string[], assignee: string, dueDate: string) => void;
+  onAddTodoTask?: (
+    nodeId: string,
+    input: {
+      title: string;
+      auditor: string;
+      plannedDate: string;
+      plannedStartHour: number;
+      plannedDurationHours: number;
+      crippNormRef?: string;
+      methodologyAssessment?: MethodologyAssessment;
+      blockerReason?: string;
+      teamSupportRequested?: boolean;
+    }
+  ) => void;
+  onUpdateTodoTask?: (
+    nodeId: string,
+    taskId: string,
+    patch: Partial<MissionTodoTask>,
+    auditLabel?: string
+  ) => void;
+  onDeleteTodoTask?: (nodeId: string, taskId: string) => void;
+  onClockInTodoTask?: (nodeId: string, taskId: string) => void;
+  onClockOutTodoTask?: (nodeId: string, taskId: string) => void;
+  onOpenFullAuditPlan?: () => void;
 }
 
 const TEAM_MEMBER_PRESETS = [
@@ -93,6 +133,12 @@ export const WorkflowNodeInspector: React.FC<WorkflowNodeInspectorProps> = ({
   onAddCrossRef,
   onRemoveCrossRef,
   onAssignNodes,
+  onAddTodoTask,
+  onUpdateTodoTask,
+  onDeleteTodoTask,
+  onClockInTodoTask,
+  onClockOutTodoTask,
+  onOpenFullAuditPlan,
 }) => {
   const navigateCrossRef = onNavigateCrossRef ?? onJumpToNode;
   const node = useMemo(
@@ -112,6 +158,12 @@ export const WorkflowNodeInspector: React.FC<WorkflowNodeInspectorProps> = ({
   const [assigneeDraft, setAssigneeDraft] = useState(node?.assignee || '');
   const [dueDateDraft, setDueDateDraft] = useState(node?.dueDate || '');
   const [readinessFilter, setReadinessFilter] = useState<'all' | 'critical'>('all');
+  const [todoTitleDraft, setTodoTitleDraft] = useState('');
+  const [todoAuditorDraft, setTodoAuditorDraft] = useState('OHA');
+  const [todoDateDraft, setTodoDateDraft] = useState(() => getMondayOfCurrentWeek());
+  const [todoStartHourDraft, setTodoStartHourDraft] = useState(8);
+  const [todoDurationDraft, setTodoDurationDraft] = useState(4);
+  const [todoNormDraft, setTodoNormDraft] = useState(CRIPP_STANDARDS[7]);
 
   const candidateRefNodes = useMemo(() => {
     if (!node) return [];
@@ -163,6 +215,11 @@ export const WorkflowNodeInspector: React.FC<WorkflowNodeInspectorProps> = ({
       title: 'Contrôle de complétude / Pré-clôture',
       icon: <ShieldAlert className="h-4 w-4 text-blue-400" aria-hidden="true" />,
       accent: 'border-blue-700/60',
+    },
+    todo: {
+      title: 'To-do liste & Suivi temps (08h / jour ouvrable)',
+      icon: <ListTodo className="h-4 w-4 text-teal-400" aria-hidden="true" />,
+      accent: 'border-teal-700/60',
     },
   };
 
@@ -685,6 +742,237 @@ export const WorkflowNodeInspector: React.FC<WorkflowNodeInspectorProps> = ({
                     </div>
                   </button>
                 ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Point 25 : To-do liste & Suivi temps 08h/j ouvrable */}
+      {inspector.mode === 'todo' && node && (
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[11px] text-slate-400">
+              Calendrier horaire 08h/jour ouvrable · Pointage début / fin &amp; écart
+            </span>
+            {onOpenFullAuditPlan && (
+              <button
+                type="button"
+                onClick={onOpenFullAuditPlan}
+                className="inline-flex items-center gap-1 rounded border border-teal-700/70 bg-teal-950/60 px-2 py-1 text-[10px] font-medium text-teal-200 hover:bg-teal-900/70 cursor-pointer"
+              >
+                <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                <span>Ouvrir Gantt &amp; Pilotage</span>
+              </button>
+            )}
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (locked || !todoTitleDraft.trim() || !onAddTodoTask) return;
+              onAddTodoTask(node.id, {
+                title: todoTitleDraft.trim(),
+                auditor: todoAuditorDraft,
+                plannedDate: snapToWorkingDay(todoDateDraft),
+                plannedStartHour: todoStartHourDraft,
+                plannedDurationHours: todoDurationDraft,
+                crippNormRef: todoNormDraft,
+                methodologyAssessment: 'conforme',
+              });
+              setTodoTitleDraft('');
+            }}
+            className="space-y-1.5 rounded border border-slate-800 bg-slate-900/70 p-2"
+          >
+            <input
+              type="text"
+              disabled={locked}
+              value={todoTitleDraft}
+              onChange={(e) => setTodoTitleDraft(e.target.value)}
+              placeholder={
+                locked
+                  ? 'Élément verrouillé par code PIN'
+                  : 'Nouvelle tâche To-do sur cette étape / ce document...'
+              }
+              className="w-full rounded border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-white placeholder:text-slate-500 focus:border-teal-500 focus:outline-none disabled:opacity-50"
+            />
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <select
+                disabled={locked}
+                value={todoAuditorDraft}
+                onChange={(e) => setTodoAuditorDraft(e.target.value)}
+                className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-white"
+              >
+                {DEFAULT_AUDITOR_PROFILES.map((p) => (
+                  <option key={p.code} value={p.code}>
+                    {p.code}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="date"
+                disabled={locked}
+                value={todoDateDraft}
+                onChange={(e) => setTodoDateDraft(snapToWorkingDay(e.target.value))}
+                className="rounded border border-slate-700 bg-slate-950 px-1.5 py-1 text-[11px] text-white"
+              />
+              <input
+                type="number"
+                disabled={locked}
+                min={8}
+                max={16}
+                value={todoStartHourDraft}
+                onChange={(e) => setTodoStartHourDraft(Number(e.target.value) || 8)}
+                title="Heure début (8-16h)"
+                className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-white"
+              />
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  disabled={locked}
+                  min={0.5}
+                  max={40}
+                  step={0.5}
+                  value={todoDurationDraft}
+                  onChange={(e) => setTodoDurationDraft(Number(e.target.value) || 2)}
+                  title="Durée prévue (h)"
+                  className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-white"
+                />
+                <span className="text-[10px] text-slate-400">h</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <select
+                disabled={locked}
+                value={todoNormDraft}
+                onChange={(e) => setTodoNormDraft(e.target.value)}
+                className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[10px] text-slate-200"
+              >
+                {CRIPP_STANDARDS.map((std) => (
+                  <option key={std} value={std}>
+                    {std}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                disabled={locked || !todoTitleDraft.trim()}
+                className="shrink-0 rounded bg-teal-700 px-3 py-1 font-medium text-white hover:bg-teal-600 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+              >
+                Planifier
+              </button>
+            </div>
+          </form>
+
+          <div className="max-h-52 space-y-1.5 overflow-y-auto pr-1">
+            {!node.todoTasks || node.todoTasks.length === 0 ? (
+              <div className="rounded border border-dashed border-slate-800 py-3 text-center text-[11px] text-slate-500">
+                Aucune tâche To-do attachée à cet élément.
+              </div>
+            ) : (
+              node.todoTasks.map((t) => (
+                <div
+                  key={t.id}
+                  className="rounded border border-slate-800 bg-slate-900/80 px-2.5 py-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                        <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono font-semibold text-teal-300">
+                          {t.auditor}
+                        </span>
+                        <span className="font-mono text-slate-400">
+                          {t.plannedDate} · {t.plannedStartHour}h ({t.plannedDurationHours}h)
+                        </span>
+                        {t.varianceHours !== undefined && (
+                          <span
+                            className={`rounded px-1.5 py-0.5 font-mono font-semibold ${
+                              t.varianceHours > 0
+                                ? 'bg-red-950/80 text-red-300'
+                                : 'bg-emerald-950/80 text-emerald-300'
+                            }`}
+                          >
+                            Écart : {t.varianceHours > 0 ? `+${t.varianceHours}h` : `${t.varianceHours}h`}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 font-medium text-slate-100">{t.title}</div>
+                      {t.blockerReason && (
+                        <div className="mt-1 flex items-center gap-1 text-[10px] text-red-300">
+                          <AlertOctagon className="h-3 w-3 shrink-0" aria-hidden="true" />
+                          <span>{t.blockerReason}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-1">
+                      {onClockInTodoTask && (
+                        <button
+                          type="button"
+                          disabled={locked}
+                          onClick={() => onClockInTodoTask(node.id, t.id)}
+                          title="Pointer début"
+                          className="inline-flex items-center gap-0.5 rounded bg-sky-700 px-1.5 py-1 text-[10px] font-medium text-white hover:bg-sky-600 disabled:opacity-40 cursor-pointer"
+                        >
+                          <Play className="h-2.5 w-2.5" aria-hidden="true" />
+                          <span>Début</span>
+                        </button>
+                      )}
+                      {onClockOutTodoTask && (
+                        <button
+                          type="button"
+                          disabled={locked}
+                          onClick={() => onClockOutTodoTask(node.id, t.id)}
+                          title="Pointer fin et calculer écart"
+                          className="inline-flex items-center gap-0.5 rounded bg-emerald-700 px-1.5 py-1 text-[10px] font-medium text-white hover:bg-emerald-600 disabled:opacity-40 cursor-pointer"
+                        >
+                          <Square className="h-2.5 w-2.5" aria-hidden="true" />
+                          <span>Fin</span>
+                        </button>
+                      )}
+                      {onUpdateTodoTask && (
+                        <button
+                          type="button"
+                          disabled={locked}
+                          onClick={() =>
+                            onUpdateTodoTask(
+                              node.id,
+                              t.id,
+                              {
+                                status: t.status === 'blocked' ? 'in-progress' : 'blocked',
+                                blockerReason:
+                                  t.status === 'blocked'
+                                    ? undefined
+                                    : t.blockerReason || 'Point bloquant signalé pour support équipe',
+                                teamSupportRequested: t.status !== 'blocked',
+                              },
+                              'Statut blocage mis à jour'
+                            )
+                          }
+                          title={t.status === 'blocked' ? 'Lever blocage' : 'Signaler blocage'}
+                          className={`rounded border px-1.5 py-1 text-[10px] cursor-pointer disabled:opacity-40 ${
+                            t.status === 'blocked'
+                              ? 'border-red-700 bg-red-950/60 text-red-200'
+                              : 'border-slate-700 bg-slate-950 text-slate-300 hover:bg-slate-800'
+                          }`}
+                        >
+                          {t.status === 'blocked' ? 'Débloquer' : 'Bloqué'}
+                        </button>
+                      )}
+                      {onDeleteTodoTask && (
+                        <button
+                          type="button"
+                          disabled={locked}
+                          onClick={() => onDeleteTodoTask(node.id, t.id)}
+                          aria-label="Supprimer cette tâche"
+                          className="rounded p-1 text-slate-400 hover:bg-red-950/50 hover:text-red-300 disabled:opacity-40 cursor-pointer"
+                        >
+                          <Trash2 className="h-3 w-3" aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
             )}
           </div>
         </div>
