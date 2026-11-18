@@ -28,6 +28,10 @@ import {
   buildSuiviRecos2025Children,
 } from './suiviRecosSimulation';
 import { buildPlanAudit2026Children } from './auditPlanWorkflowData';
+import {
+  buildAuditTresorerie2026Children,
+  buildMissionDossierStandardChildren,
+} from './missionStepsFormatData';
 
 export const INITIAL_CLIENT_SESSION: ClientSessionConfig = {
   client: 'Banque Atlantique UMOA',
@@ -209,32 +213,57 @@ function buildExerciceFirstTrees(prefix: 'user' | 'team'): WorkflowTreeNode[] {
           label: 'Audit trésorerie',
           nodeType: 'section',
           natureId: 'ex-audit',
-          children: wrapDocsForScope(prefix, '26-ea-tres', 'ex-audit', [
-            { id: 'ea26-a29', label: 'A29 - Caisse & contrôle inopiné', sig: 'SEK' },
-            { id: 'ea26-lm', label: '15. Lettre de mission Trésorerie 2026 (13.1)', sig: 'SEK' },
-            { id: 'ea26-fc', label: '63. Feuille couverture — Rapprochements bancaires', sig: 'JFK' },
-            { id: 'ea26-pv', label: '69. PV de comptage coffre & encaisse 2026', sig: 'TAK' },
-          ]),
+          children: buildAuditTresorerie2026Children(prefix),
         },
         {
           id: `${prefix}-2026-ex-audit-vente`,
           label: 'Audit vente',
           nodeType: 'section',
           natureId: 'ex-audit',
-          children: wrapDocsForScope(prefix, '26-ea-vente', 'ex-audit', [
-            { id: 'ea26-v-risk', label: '38. Cartographie des risques Cycle Ventes 2026 (13.2)', sig: 'TAK' },
-            { id: 'ea26-v-test', label: '65. Feuille de tests substance facturation & cut-off', sig: 'JFK' },
-          ]),
+          children: buildMissionDossierStandardChildren(prefix, '26-ea-vente', {
+            exerciceYear: '2026',
+            sqliteHasData: false,
+            prepDocs: [
+              {
+                id: 'ea26-v-risk',
+                label: '38. Cartographie des risques Cycle Ventes 2026 (13.2).xlsx',
+                sig: 'TAK',
+                sourceDocFormat: 'xlsx',
+              },
+            ],
+            realDocs: [
+              {
+                id: 'ea26-v-test',
+                label: '65. Feuille de tests substance facturation & cut-off.xlsx',
+                sig: 'JFK',
+                sourceDocFormat: 'xlsx',
+              },
+            ],
+          }),
         },
         {
           id: `${prefix}-2026-ex-audit-fraude`,
           label: 'Audit fraude',
           nodeType: 'section',
           natureId: 'ex-audit',
-          children: wrapDocsForScope(prefix, '26-ea-fraude', 'ex-audit', [
-            { id: 'ea26-f-caat', label: '72. Plan de tests analytiques CAATs (doublons, séquences)', sig: 'SEK' },
-            { id: 'ea26-f-alerte', label: '77. Tests des indicateurs de fraude & signaux d’alerte', sig: 'OHA' },
-          ]),
+          children: buildMissionDossierStandardChildren(prefix, '26-ea-fraude', {
+            exerciceYear: '2026',
+            sqliteHasData: false,
+            realDocs: [
+              {
+                id: 'ea26-f-caat',
+                label: '72. Plan de tests analytiques CAATs (doublons, séquences).xlsx',
+                sig: 'SEK',
+                sourceDocFormat: 'xlsx',
+              },
+              {
+                id: 'ea26-f-alerte',
+                label: '77. Tests des indicateurs de fraude & signaux d’alerte.pdf',
+                sig: 'OHA',
+                sourceDocFormat: 'pdf',
+              },
+            ],
+          }),
         },
         ...buildCategoryTreeNodes(prefix, 'ex-audit', '2026-ea100', EX_AUDIT_100_GROUPS),
       ],
@@ -390,47 +419,16 @@ function buildExerciceFirstTrees(prefix: 'user' | 'team'): WorkflowTreeNode[] {
           label: 'Phases de mission',
           nodeType: 'section',
           natureId: 'doc-mission',
-          children: [
-            {
-              id: `${prefix}-2026-dm-prep`,
-              label: 'Phase de préparation',
-              nodeType: 'sous-section',
-              natureId: 'doc-mission',
-              children: wrapDocsForScope(prefix, '26-dm-p', 'doc-mission', [
-                { id: 'dm26-lm', label: '01. Lettre de mission & Avis d’audit (Norme 13.1)', sig: 'SEK' },
-                { id: 'dm26-qpc', label: '02. Questionnaire de prise de connaissance (QPC) & Entretiens', sig: 'JFK' },
-                { id: 'dm26-flow', label: '03. Flowchart (Outil III) & Test de cheminement (Outil V)', sig: 'TAK' },
-                { id: 'dm26-risk', label: '04. Cartographie des risques mission & Référentiel CI (Outils VI-VII)', sig: 'SEK' },
-                { id: 'dm26-qci', label: '05. Questionnaire de contrôle interne — QCI (Outil IX)', sig: 'JFK' },
-                { id: 'dm26-ro', label: '06. Rapport d’orientation & Objectifs spécifiques (13.3)', sig: 'OHA' },
-                { id: 'dm26-pt', label: '07. Le programme de travail — Norme 13.6 (Programme-001)', sig: 'SEK' },
-              ]),
-            },
-            {
-              id: `${prefix}-2026-dm-real`,
-              label: 'Phase de réalisation',
-              nodeType: 'sous-section',
-              natureId: 'doc-mission',
-              children: wrapDocsForScope(prefix, '26-dm-r', 'doc-mission', [
-                { id: 'dm26-fc', label: '08. Feuille couverture — Tests de conformité & substance (CTR)', sig: 'JFK' },
-                { id: 'dm26-pv', label: '09. PV d’inventaire inopiné & observations physiques (Outil XIV)', sig: 'TAK' },
-                { id: 'dm26-caat', label: '10. Extractions Core Banking & analyses CAATs (Outil XVI)', sig: 'SEK' },
-                { id: 'dm26-rev', label: '11. Notes de revue superviseur & validation des preuves (12.3, 14.1)', sig: 'OHA' },
-              ]),
-            },
-            {
-              id: `${prefix}-2026-dm-conc`,
-              label: 'Phase de conclusion',
-              nodeType: 'sous-section',
-              natureId: 'doc-mission',
-              children: wrapDocsForScope(prefix, '26-dm-c', 'doc-mission', [
-                { id: 'dm26-frap', label: '12. LA FRAP = Feuille de Révélation et d’Analyse de Problème (5C)', sig: 'TAK' },
-                { id: 'dm26-rp', label: '13. Projet de rapport provisoire & validation contradictoire (11.2)', sig: 'SEK' },
-                { id: 'dm26-clot', label: '14. Compte rendu réunion de clôture & réponses de l’audité', sig: 'JFK' },
-                { id: 'dm26-rf', label: '15. Le rapport final, plan d’action & fiche d’archivage (14.6, 15.1)', sig: 'OHA' },
-              ]),
-            },
-          ],
+          children: buildMissionDossierStandardChildren(prefix, '26-dm-phases', {
+            exerciceYear: '2026',
+            sqliteHasData: true,
+            prepDocs: [
+              { id: 'dm26-flow', label: 'Flowchart (Outil III) & Test de cheminement (Outil V).pdf', sig: 'TAK', sourceDocFormat: 'pdf' },
+            ],
+            realDocs: [
+              { id: 'dm26-caat', label: 'Extractions Core Banking & analyses CAATs (Outil XVI).xlsx', sig: 'SEK', sourceDocFormat: 'xlsx' },
+            ],
+          }),
         },
         {
           id: `${prefix}-2026-doc-mission-carto`,
@@ -463,34 +461,46 @@ function buildExerciceFirstTrees(prefix: 'user' | 'team'): WorkflowTreeNode[] {
           label: 'Audit trésorerie',
           nodeType: 'section',
           natureId: 'ex-audit',
-          children: wrapDocsForScope(prefix, '25-ea-tres', 'ex-audit', [
-            { id: 'ea25-c100', label: 'C100-cadrage immobilisation & caisse', sig: 'SEK' },
-            { id: 'ea25-pt-tr', label: '53. Programme de travail Trésorerie 2025 (13.6)', sig: 'SEK' },
-            { id: 'ea25-fc-tr', label: '63. Feuille couverture — Inventaire caisse inopiné', sig: 'JFK' },
-            { id: 'ea25-rap-tr', label: '60. Compte rendu réunion d’ouverture Trésorerie', sig: 'TAK' },
-          ]),
+          children: buildMissionDossierStandardChildren(prefix, '25-ea-tres', {
+            exerciceYear: '2025',
+            sqliteHasData: false,
+            prepDocs: [
+              { id: 'ea25-c100', label: 'C100-cadrage immobilisation & caisse 2025.xlsx', sig: 'SEK', sourceDocFormat: 'xlsx' },
+            ],
+            realDocs: [
+              { id: 'ea25-pv-tr', label: 'PV inventaire caisse inopiné 2025.pdf', sig: 'JFK', sourceDocFormat: 'pdf' },
+            ],
+          }),
         },
         {
           id: `${prefix}-2025-ex-audit-vente`,
           label: 'Audit vente',
           nodeType: 'section',
           natureId: 'ex-audit',
-          children: wrapDocsForScope(prefix, '25-ea-vente', 'ex-audit', [
-            { id: 'ea25-v-qci', label: '29. Questionnaire de contrôle interne — Cycle Ventes 2025', sig: 'SEK' },
-            { id: 'ea25-v-walk', label: '30. Test de cheminement facturation & encaissement', sig: 'JFK' },
-            { id: 'ea25-v-rev', label: '80. Notes de revue superviseur — Ventes', sig: 'TAK' },
-          ]),
+          children: buildMissionDossierStandardChildren(prefix, '25-ea-vente', {
+            exerciceYear: '2025',
+            sqliteHasData: false,
+            prepDocs: [
+              { id: 'ea25-v-walk', label: '30. Test de cheminement facturation & encaissement 2025.docx', sig: 'JFK', sourceDocFormat: 'docx' },
+            ],
+            realDocs: [
+              { id: 'ea25-v-rev', label: '80. Notes de revue superviseur — Ventes 2025.pdf', sig: 'TAK', sourceDocFormat: 'pdf' },
+            ],
+          }),
         },
         {
           id: `${prefix}-2025-ex-audit-fraude`,
           label: 'Audit fraude',
           nodeType: 'section',
           natureId: 'ex-audit',
-          children: wrapDocsForScope(prefix, '25-ea-fraude', 'ex-audit', [
-            { id: 'ea25-f-sig', label: '77. Tests des indicateurs de fraude et signaux d’alerte', sig: 'SEK' },
-            { id: 'ea25-b1', label: 'B1-Revue analytique & détection doublons CAATs', sig: 'JFK' },
-            { id: 'ea25-f-frap', label: '86. FRAP — Fractionnement de paiements sous seuil', sig: 'TAK' },
-          ]),
+          children: buildMissionDossierStandardChildren(prefix, '25-ea-fraude', {
+            exerciceYear: '2025',
+            sqliteHasData: false,
+            realDocs: [
+              { id: 'ea25-f-sig', label: '77. Tests des indicateurs de fraude et signaux d’alerte 2025.xlsx', sig: 'SEK', sourceDocFormat: 'xlsx' },
+              { id: 'ea25-b1', label: 'B1-Revue analytique & détection doublons CAATs 2025.xlsx', sig: 'JFK', sourceDocFormat: 'xlsx' },
+            ],
+          }),
         },
         {
           id: `${prefix}-2025-ex-audit-synthese`,
@@ -603,11 +613,34 @@ function buildExerciceFirstTrees(prefix: 'user' | 'team'): WorkflowTreeNode[] {
       label: 'Workflow Dossier exercice - Audit',
       nodeType: 'nature',
       natureId: 'ex-audit',
-      children: wrapDocsForScope(prefix, '24-ea', 'ex-audit', [
-        { id: 'ea24-prep', label: '15. Lettre de mission & programme de travail archivés 2024', sig: 'SEK' },
-        { id: 'ea24-frap', label: '86. Recueil des FRAP validées exercice 2024', sig: 'JFK' },
-        { id: 'ea24-arc', label: '100. Fiche de clôture et archivage dossier 2024 (14.6)', sig: 'TAK' },
-      ]),
+      children: [
+        {
+          id: `${prefix}-2024-ex-audit-tresorerie`,
+          label: 'Audit trésorerie 2024',
+          nodeType: 'section',
+          natureId: 'ex-audit',
+          children: buildMissionDossierStandardChildren(prefix, '24-ea-tres', {
+            exerciceYear: '2024',
+            sqliteHasData: false,
+            concDocs: [
+              { id: 'ea24-arc', label: '100. Fiche de clôture et archivage dossier 2024 (14.6).pdf', sig: 'TAK', sourceDocFormat: 'pdf' },
+            ],
+          }),
+        },
+        {
+          id: `${prefix}-2024-ex-audit-achats`,
+          label: 'Audit achats & marchés 2024',
+          nodeType: 'section',
+          natureId: 'ex-audit',
+          children: buildMissionDossierStandardChildren(prefix, '24-ea-achats', {
+            exerciceYear: '2024',
+            sqliteHasData: false,
+            prepDocs: [
+              { id: 'ea24-prep', label: '15. Lettre de mission & programme de travail archivés 2024.pdf', sig: 'SEK', sourceDocFormat: 'pdf' },
+            ],
+          }),
+        },
+      ],
     },
     {
       id: `${prefix}-2024-ex-cac`,

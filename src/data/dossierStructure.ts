@@ -175,14 +175,12 @@ export const INITIAL_AUDIT_MESSAGES: AuditChatMessage[] = [
       'Voici la fiche de cadrage pour la lettre de mission validée par la Direction Générale :',
     table: {
       caption: 'Cadrage — Lettre de mission',
-      headers: ['Etape de mission', 'Norme', 'Méthode', 'Reference'],
+      headers: ['Rubrique', 'Description'],
       rows: [
-        [
-          'Lettre de mission',
-          'Norme 13.1 — Planification de la mission',
-          'Mandat officiel et périmètre Achats',
-          'LM-2026-04',
-        ],
+        ['Etape de mission', 'Lettre de mission'],
+        ['Norme', 'Norme 13.1 — Planification de la mission'],
+        ['Méthode', 'Mandat officiel et périmètre Achats'],
+        ['Reference', 'LM-2026-04'],
       ],
     },
   },
@@ -221,14 +219,12 @@ export const INITIAL_AUDIT_MESSAGES: AuditChatMessage[] = [
       'Programme de travail structuré selon la méthode des contrôles clés par les risques :',
     table: {
       caption: 'Programme de travail — Phase de préparation',
-      headers: ['Etape de mission', 'Norme', 'Méthode', 'Reference'],
+      headers: ['Rubrique', 'Description'],
       rows: [
-        [
-          'Programme de travail',
-          'Norme 13.6 Programme de travail',
-          'Méthode des contrôles clés par les risques',
-          'Programme-001',
-        ],
+        ['Etape de mission', 'Programme de travail'],
+        ['Norme', 'Norme 13.6 Programme de travail'],
+        ['Méthode', 'Méthode des contrôles clés par les risques'],
+        ['Reference', 'Programme-001'],
       ],
     },
   },

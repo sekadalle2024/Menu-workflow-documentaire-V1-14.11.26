@@ -24,6 +24,7 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Share2,
   ShieldAlert,
   SlidersHorizontal,
   Table2,
@@ -42,6 +43,50 @@ import {
   isNodeLockedOrWithinLockedAncestor,
 } from '../utils/workflowTreeOps';
 import { RecoInfoManagerPanel, RecoPanelViewMode } from './RecoInfoManagerPanel';
+import * as d3 from 'd3';
+import {
+  Bar as RechartsBar,
+  BarChart as RechartsBarChart,
+  CartesianGrid as RechartsCartesianGrid,
+  Cell as RechartsCell,
+  Pie as RechartsPie,
+  PieChart as RechartsPieChart,
+  ResponsiveContainer as RechartsResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis as RechartsXAxis,
+  YAxis as RechartsYAxis,
+} from 'recharts';
+import {
+  ArcElement,
+  BarController,
+  BarElement,
+  CategoryScale,
+  Chart as ChartJS,
+  type ChartData,
+  type ChartOptions,
+  Filler,
+  Legend as ChartJsLegend,
+  LinearScale,
+  LineController,
+  LineElement,
+  PointElement,
+  Tooltip as ChartJsTooltip,
+} from 'chart.js';
+import { Bar as ChartJsBar, Chart as ChartJsMixed } from 'react-chartjs-2';
+
+ChartJS.register(
+  ArcElement,
+  BarElement,
+  BarController,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  LineController,
+  ChartJsTooltip,
+  ChartJsLegend,
+  Filler
+);
 
 export type RecoLiveStatut = 'Réalisé' | 'En attente' | 'Reporté' | 'Non réalisé';
 export type RecoRiskLevel = 'Critique' | 'Majeur' | 'Modéré';
@@ -262,6 +307,7 @@ interface SuiviRecosAnalyticsDashboardProps {
     recoNodeId: string,
     patch: Partial<RecoSourceMetadata>
   ) => void;
+  onShareSuiviRecos?: (scopeRootId: 'root-workflow' | 'root-team-workflow') => void;
 }
 
 type SortKey = 'no' | 'risk' | 'statut' | 'delai' | 'docs' | 'mission';
@@ -303,6 +349,7 @@ export const SuiviRecosAnalyticsDashboard: React.FC<
   onIntegrateCollection,
   onOpenNodeInWorkflow,
   onUpdateRecoMeta,
+  onShareSuiviRecos,
 }) => {
   // Navigation & Power BI side panes
   const [activePage, setActivePage] = useState<ReportPageId>('executive');
@@ -1124,10 +1171,13 @@ export const SuiviRecosAnalyticsDashboard: React.FC<
     const activeHover = hoveredStatutSlice
       ? donutStats.segments.find((s) => s.statut === hoveredStatutSlice)
       : null;
+    const pieData = donutStats.segments.filter((s) => s.count > 0);
+    const chartSize = inFocus ? 228 : 164;
+
     return (
       <div className="flex h-full flex-col bg-white border border-[#E1DFDD]">
         {renderVisualHeader(
-          'Répartition par Statut',
+          'Répartition par Statut (Recharts)',
           'Clic tranche ou légende = filtrage croisé du rapport',
           'donut',
           () => setActivePage('details')
@@ -1137,56 +1187,77 @@ export const SuiviRecosAnalyticsDashboard: React.FC<
             inFocus ? 'sm:flex-row sm:gap-10 py-10' : 'sm:flex-row'
           }`}
         >
-          <div className="relative shrink-0">
-            <svg
-              viewBox="0 0 144 144"
-              role="img"
-              aria-label="Graphique en anneau des statuts de recommandations"
-              className={inFocus ? 'h-56 w-56' : 'h-36 w-36'}
-            >
-              <circle
-                cx="72"
-                cy="72"
-                r={donutStats.radius}
-                fill="none"
-                stroke="#F3F2F1"
-                strokeWidth="20"
-              />
-              <g transform="rotate(-90 72 72)">
-                {donutStats.segments.map((seg) => {
-                  const isSelected = statutFilter === seg.statut;
-                  const isDimmed =
-                    (statutFilter !== 'all' && !isSelected) ||
-                    (hoveredStatutSlice !== null && hoveredStatutSlice !== seg.statut);
-                  if (seg.count === 0) return null;
-                  return (
-                    <circle
-                      key={seg.statut}
-                      cx="72"
-                      cy="72"
-                      r={donutStats.radius}
-                      fill="none"
-                      stroke={seg.color}
-                      strokeWidth={isSelected || hoveredStatutSlice === seg.statut ? 24 : 20}
-                      strokeDasharray={`${seg.arcLength} ${donutStats.circumference}`}
-                      strokeDashoffset={seg.offset}
-                      opacity={isDimmed ? 0.32 : 1}
-                      className="cursor-pointer transition-opacity duration-150"
-                      onMouseEnter={() => setHoveredStatutSlice(seg.statut)}
-                      onMouseLeave={() => setHoveredStatutSlice(null)}
-                      onClick={() =>
-                        setStatutFilter(statutFilter === seg.statut ? 'all' : seg.statut)
-                      }
-                    />
-                  );
-                })}
-              </g>
-            </svg>
+          <div
+            className="relative shrink-0"
+            style={{ width: chartSize, height: chartSize }}
+          >
+            <RechartsResponsiveContainer width="100%" height="100%">
+              <RechartsPieChart>
+                <RechartsPie
+                  data={pieData}
+                  dataKey="count"
+                  nameKey="statut"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={inFocus ? 64 : 46}
+                  outerRadius={inFocus ? 98 : 70}
+                  paddingAngle={2}
+                  stroke="#FFFFFF"
+                  strokeWidth={2}
+                  isAnimationActive={false}
+                  onMouseEnter={(_, idx) => {
+                    const seg = pieData[idx];
+                    if (seg) setHoveredStatutSlice(seg.statut);
+                  }}
+                  onMouseLeave={() => setHoveredStatutSlice(null)}
+                  onClick={(_, idx) => {
+                    const seg = pieData[idx];
+                    if (!seg) return;
+                    setStatutFilter(statutFilter === seg.statut ? 'all' : seg.statut);
+                  }}
+                >
+                  {pieData.map((seg) => {
+                    const isSelected = statutFilter === seg.statut;
+                    const isDimmed =
+                      (statutFilter !== 'all' && !isSelected) ||
+                      (hoveredStatutSlice !== null && hoveredStatutSlice !== seg.statut);
+                    return (
+                      <RechartsCell
+                        key={seg.statut}
+                        fill={seg.color}
+                        fillOpacity={isDimmed ? 0.28 : 1}
+                        className="cursor-pointer outline-none"
+                      />
+                    );
+                  })}
+                </RechartsPie>
+                <RechartsTooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload || !payload[0]) return null;
+                    const seg = payload[0].payload as (typeof donutStats.segments)[number];
+                    return (
+                      <div className="border border-[#E1DFDD] bg-white px-2.5 py-1.5 text-[11px] shadow-md">
+                        <div className="flex items-center gap-1.5 font-semibold text-[#252423]">
+                          <span
+                            className="h-2 w-2 shrink-0"
+                            style={{ backgroundColor: seg.color }}
+                          />
+                          {seg.statut}
+                        </div>
+                        <div className="mt-0.5 font-mono text-[#605E5C] tabular-nums">
+                          {seg.count} reco(s) · {seg.pct.toFixed(1).replace('.', ',')} %
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
+              </RechartsPieChart>
+            </RechartsResponsiveContainer>
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
               <span className="font-mono text-xl font-bold text-[#252423] tabular-nums">
                 {activeHover ? activeHover.count : donutStats.total}
               </span>
-              <span className="text-[10px] font-medium text-[#605E5C]">
+              <span className="max-w-[84px] truncate text-[10px] font-medium text-[#605E5C]">
                 {activeHover
                   ? `${activeHover.statut} (${activeHover.pct.toFixed(0)} %)`
                   : 'Recos total'}
@@ -1357,122 +1428,153 @@ export const SuiviRecosAnalyticsDashboard: React.FC<
     );
   };
 
-  const renderMissionsVisual = (inFocus = false) => (
-    <div className="flex h-full flex-col bg-white border border-[#E1DFDD]">
-      {renderVisualHeader(
-        `Avancement par Mission (${missionStats.length})`,
-        'Barres empilées triées par criticité ouverte · Cliquer pour filtrer',
-        'missions',
-        () => setActivePage('details')
-      )}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F3F2F1] bg-[#FAF9F8] px-3.5 py-1.5 text-[10px] font-medium text-[#605E5C]">
-        <div className="flex flex-wrap items-center gap-3">
-          {(['Réalisé', 'En attente', 'Reporté', 'Non réalisé'] as RecoLiveStatut[]).map((st) => (
-            <span key={st} className="inline-flex items-center gap-1">
-              <span
-                className="h-2.5 w-2.5"
-                style={{ backgroundColor: STATUT_COLORS[st] }}
-                aria-hidden="true"
-              />
-              {st}
-            </span>
-          ))}
-        </div>
-        {missionFilter !== 'all' && (
-          <button
-            type="button"
-            onClick={() => setMissionFilter('all')}
-            className="font-semibold text-[#005A9E] hover:underline cursor-pointer"
-          >
-            Effacer filtre mission
-          </button>
-        )}
-      </div>
+  const renderMissionsVisual = (inFocus = false) => {
+    const visibleMissions = inFocus ? missionStats : missionStats.slice(0, 8);
+    const chartData = visibleMissions.map((m) => ({
+      ...m,
+      shortName:
+        m.mission.length > 26 ? `${m.mission.slice(0, 25)}…` : m.mission,
+    }));
+    const chartHeight = Math.max(220, visibleMissions.length * (inFocus ? 42 : 34));
 
-      <div
-        className={`flex-1 space-y-2 overflow-y-auto p-3.5 ${
-          inFocus ? 'max-h-none' : 'max-h-[260px]'
-        }`}
-      >
-        {missionStats.length === 0 ? (
-          <div className="border border-dashed border-[#E1DFDD] p-6 text-center text-xs text-[#605E5C]">
-            Aucune mission ne correspond aux filtres actifs.
-          </div>
-        ) : (
-          missionStats.map((m) => {
-            const isSelected = missionFilter === m.mission;
-            const pctDone = Math.round((m.realise / Math.max(1, m.total)) * 100);
-            return (
-              <button
-                key={m.mission}
-                type="button"
-                onClick={() => setMissionFilter(isSelected ? 'all' : m.mission)}
-                className={`w-full border px-2.5 py-2 text-left transition-colors cursor-pointer ${
-                  isSelected
-                    ? 'border-[#F2C811] bg-[#FFFDF2]'
-                    : 'border-transparent hover:border-[#E1DFDD] hover:bg-[#FAF9F8]'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate font-semibold text-[#252423]" title={m.mission}>
-                    {m.mission}
-                  </span>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {m.critOpen > 0 && (
-                      <span className="font-mono text-[10px] font-semibold text-[#A4262C] tabular-nums">
-                        {m.critOpen} crit. ouv.
-                      </span>
-                    )}
-                    <span className="font-mono text-[11px] font-semibold text-[#323130] tabular-nums">
-                      {m.realise}/{m.total} ({pctDone} %)
-                    </span>
-                  </div>
-                </div>
-                <div className="mt-1.5 flex h-2.5 w-full overflow-hidden bg-[#F3F2F1]">
-                  {m.realise > 0 && (
-                    <div
-                      style={{
-                        width: `${(m.realise / m.total) * 100}%`,
-                        backgroundColor: STATUT_COLORS['Réalisé'],
-                      }}
-                      title={`Réalisé : ${m.realise}`}
-                    />
-                  )}
-                  {m.enAttente > 0 && (
-                    <div
-                      style={{
-                        width: `${(m.enAttente / m.total) * 100}%`,
-                        backgroundColor: STATUT_COLORS['En attente'],
-                      }}
-                      title={`En attente : ${m.enAttente}`}
-                    />
-                  )}
-                  {m.reporte > 0 && (
-                    <div
-                      style={{
-                        width: `${(m.reporte / m.total) * 100}%`,
-                        backgroundColor: STATUT_COLORS['Reporté'],
-                      }}
-                      title={`Reporté : ${m.reporte}`}
-                    />
-                  )}
-                  {m.nonRealise > 0 && (
-                    <div
-                      style={{
-                        width: `${(m.nonRealise / m.total) * 100}%`,
-                        backgroundColor: STATUT_COLORS['Non réalisé'],
-                      }}
-                      title={`Non réalisé : ${m.nonRealise}`}
-                    />
-                  )}
-                </div>
-              </button>
-            );
-          })
+    return (
+      <div className="flex h-full flex-col bg-white border border-[#E1DFDD]">
+        {renderVisualHeader(
+          `Avancement par Mission (${missionStats.length}) · Recharts`,
+          'Barres empilées triées par criticité ouverte · Cliquer pour filtrer',
+          'missions',
+          () => setActivePage('details')
         )}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F3F2F1] bg-[#FAF9F8] px-3.5 py-1.5 text-[10px] font-medium text-[#605E5C]">
+          <div className="flex flex-wrap items-center gap-3">
+            {(['Réalisé', 'En attente', 'Reporté', 'Non réalisé'] as RecoLiveStatut[]).map((st) => (
+              <span key={st} className="inline-flex items-center gap-1">
+                <span
+                  className="h-2.5 w-2.5"
+                  style={{ backgroundColor: STATUT_COLORS[st] }}
+                  aria-hidden="true"
+                />
+                {st}
+              </span>
+            ))}
+          </div>
+          {missionFilter !== 'all' && (
+            <button
+              type="button"
+              onClick={() => setMissionFilter('all')}
+              className="font-semibold text-[#005A9E] hover:underline cursor-pointer"
+            >
+              Effacer filtre mission
+            </button>
+          )}
+        </div>
+
+        <div className={`flex-1 overflow-y-auto p-3.5 ${inFocus ? 'max-h-none' : 'max-h-[290px]'}`}>
+          {missionStats.length === 0 ? (
+            <div className="border border-dashed border-[#E1DFDD] p-6 text-center text-xs text-[#605E5C]">
+              Aucune mission ne correspond aux filtres actifs.
+            </div>
+          ) : (
+            <div style={{ width: '100%', height: chartHeight }}>
+              <RechartsResponsiveContainer width="100%" height="100%">
+                <RechartsBarChart
+                  data={chartData}
+                  layout="vertical"
+                  margin={{ top: 4, right: 16, left: 6, bottom: 4 }}
+                  barCategoryGap={6}
+                  onClick={(state) => {
+                    const idx =
+                      typeof state?.activeTooltipIndex === 'number'
+                        ? state.activeTooltipIndex
+                        : -1;
+                    const clicked = chartData[idx];
+                    if (clicked) {
+                      setMissionFilter(
+                        missionFilter === clicked.mission ? 'all' : clicked.mission
+                      );
+                    }
+                  }}
+                >
+                  <RechartsCartesianGrid
+                    stroke="#EDEBE9"
+                    strokeDasharray="3 3"
+                    horizontal={false}
+                  />
+                  <RechartsXAxis
+                    type="number"
+                    allowDecimals={false}
+                    tick={{ fontSize: 10, fill: '#605E5C' }}
+                    axisLine={{ stroke: '#E1DFDD' }}
+                    tickLine={false}
+                  />
+                  <RechartsYAxis
+                    type="category"
+                    dataKey="shortName"
+                    width={inFocus ? 200 : 145}
+                    tick={{ fontSize: 10, fill: '#252423', fontWeight: 500 }}
+                    axisLine={{ stroke: '#E1DFDD' }}
+                    tickLine={false}
+                  />
+                  <RechartsTooltip
+                    cursor={{ fill: '#FAF9F8' }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload || !payload[0]) return null;
+                      const m = payload[0].payload as (typeof chartData)[number];
+                      const pctDone = Math.round((m.realise / Math.max(1, m.total)) * 100);
+                      return (
+                        <div className="max-w-[260px] border border-[#E1DFDD] bg-white px-3 py-2 text-[11px] shadow-md">
+                          <div className="font-semibold text-[#252423]">{m.mission}</div>
+                          <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 font-mono text-[10px] tabular-nums">
+                            <span className="text-[#107C10]">Réalisé : {m.realise}</span>
+                            <span className="text-[#118DFF]">En attente : {m.enAttente}</span>
+                            <span className="text-[#E66C37]">Reporté : {m.reporte}</span>
+                            <span className="text-[#D13438]">Non réalisé : {m.nonRealise}</span>
+                          </div>
+                          <div className="mt-1 border-t border-[#EDEBE9] pt-1 font-mono text-[10px] font-semibold text-[#323130] tabular-nums">
+                            Avancement : {m.realise}/{m.total} ({pctDone} %)
+                            {m.critOpen > 0 ? ` · ${m.critOpen} crit. ouv.` : ''}
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <RechartsBar
+                    dataKey="realise"
+                    stackId="st"
+                    fill={STATUT_COLORS['Réalisé']}
+                    isAnimationActive={false}
+                    className="cursor-pointer"
+                  />
+                  <RechartsBar
+                    dataKey="enAttente"
+                    stackId="st"
+                    fill={STATUT_COLORS['En attente']}
+                    isAnimationActive={false}
+                    className="cursor-pointer"
+                  />
+                  <RechartsBar
+                    dataKey="reporte"
+                    stackId="st"
+                    fill={STATUT_COLORS['Reporté']}
+                    isAnimationActive={false}
+                    className="cursor-pointer"
+                  />
+                  <RechartsBar
+                    dataKey="nonRealise"
+                    stackId="st"
+                    fill={STATUT_COLORS['Non réalisé']}
+                    radius={[0, 3, 3, 0]}
+                    isAnimationActive={false}
+                    className="cursor-pointer"
+                  />
+                </RechartsBarChart>
+              </RechartsResponsiveContainer>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderTimelineVisual = (inFocus = false) => {
     const hoveredMonthData =
@@ -1485,23 +1587,133 @@ export const SuiviRecosAnalyticsDashboard: React.FC<
           }
         : null;
 
+    const chartData: ChartData<'bar' | 'line', number[], string> = {
+      labels: MONTH_SHORT,
+      datasets: [
+        {
+          type: 'bar' as const,
+          label: 'Échéance initiale (Delai)',
+          data: monthlyTimeline.initialByMonth,
+          backgroundColor: MONTH_SHORT.map((_, i) =>
+            monthFilter === null || monthFilter === i
+              ? '#118DFF'
+              : 'rgba(17, 141, 255, 0.25)'
+          ),
+          borderRadius: 3,
+          barPercentage: 0.72,
+          categoryPercentage: 0.74,
+          order: 2,
+        },
+        {
+          type: 'bar' as const,
+          label: 'Report accordé (Report delai)',
+          data: monthlyTimeline.reportedByMonth,
+          backgroundColor: MONTH_SHORT.map((_, i) =>
+            monthFilter === null || monthFilter === i
+              ? '#E66C37'
+              : 'rgba(230, 108, 55, 0.25)'
+          ),
+          borderRadius: 3,
+          barPercentage: 0.72,
+          categoryPercentage: 0.74,
+          order: 2,
+        },
+        {
+          type: 'line' as const,
+          label: 'Réalisées à échéance',
+          data: monthlyTimeline.realisedByMonth,
+          borderColor: '#107C10',
+          backgroundColor: 'rgba(16, 124, 16, 0.10)',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#107C10',
+          tension: 0.32,
+          fill: true,
+          order: 1,
+        },
+      ],
+    };
+
+    const chartOptions: ChartOptions<'bar' | 'line'> = {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'index',
+        intersect: false,
+      },
+      onHover: (_event, elements) => {
+        if (elements && elements.length > 0) {
+          setHoveredMonthIdx(elements[0].index);
+        } else {
+          setHoveredMonthIdx(null);
+        }
+      },
+      onClick: (_event, elements) => {
+        if (elements && elements.length > 0) {
+          const idx = elements[0].index;
+          setMonthFilter(monthFilter === idx ? null : idx);
+        }
+      },
+      plugins: {
+        legend: {
+          display: false,
+        },
+        tooltip: {
+          backgroundColor: '#FFFFFF',
+          titleColor: '#252423',
+          bodyColor: '#323130',
+          borderColor: '#E1DFDD',
+          borderWidth: 1,
+          padding: 8,
+          titleFont: { size: 11, weight: 'bold' },
+          bodyFont: { size: 11 },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            color: (ctx) =>
+              monthFilter === ctx.index ? '#252423' : '#605E5C',
+            font: { size: 10, weight: 600 },
+          },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            precision: 0,
+            color: '#605E5C',
+            font: { size: 10 },
+          },
+          grid: {
+            color: '#EDEBE9',
+          },
+        },
+      },
+    };
+
     return (
       <div className="flex h-full flex-col bg-white border border-[#E1DFDD]">
         {renderVisualHeader(
-          'Chronologie Échéances Initiales vs Reports',
+          'Chronologie Échéances vs Reports (Chart.js)',
           'Cliquer sur un mois pour croiser les recommandations échues ou reportées',
           'timeline',
           () => setActivePage('details')
         )}
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F3F2F1] bg-[#FAF9F8] px-3.5 py-1.5 text-[10px] font-medium text-[#605E5C]">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3.5">
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 bg-[#118DFF]" aria-hidden="true" />
-              Échéance initiale (Delai)
+              Échéance initiale
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 bg-[#E66C37]" aria-hidden="true" />
-              Report accordé (Report delai)
+              Report accordé
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-0.5 w-3.5 bg-[#107C10]" aria-hidden="true" />
+              Réalisées
             </span>
           </div>
           {hoveredMonthData ? (
@@ -1522,247 +1734,215 @@ export const SuiviRecosAnalyticsDashboard: React.FC<
         </div>
 
         <div className="flex-1 p-4">
-          <svg
-            viewBox="0 0 600 180"
-            role="img"
-            aria-label="Histogramme mensuel des échéances initiales et reports de délai"
-            className={`w-full overflow-visible ${inFocus ? 'h-72' : 'h-44'}`}
-          >
-            {[0, 0.25, 0.5, 0.75, 1].map((t) => {
-              const y = 142 - t * 112;
-              const tickVal = Math.round(t * monthlyTimeline.maxVal);
-              return (
-                <g key={t}>
-                  <line
-                    x1="28"
-                    x2="590"
-                    y1={y}
-                    y2={y}
-                    stroke="#E1DFDD"
-                    strokeDasharray={t === 0 ? undefined : '3 3'}
-                  />
-                  <text
-                    x="22"
-                    y={y + 3}
-                    textAnchor="end"
-                    fontSize="9"
-                    fill="#605E5C"
-                    fontFamily="var(--font-mono)"
-                  >
-                    {tickVal}
-                  </text>
-                </g>
-              );
-            })}
-            {MONTH_SHORT.map((mName, idx) => {
-              const xBase = 36 + idx * 46;
-              const initVal = monthlyTimeline.initialByMonth[idx];
-              const repVal = monthlyTimeline.reportedByMonth[idx];
-              const hInit = (initVal / monthlyTimeline.maxVal) * 108;
-              const hRep = (repVal / monthlyTimeline.maxVal) * 108;
-              const isSelected = monthFilter === idx;
-              const isDimmed = monthFilter !== null && !isSelected;
-
-              return (
-                <g
-                  key={mName}
-                  className="cursor-pointer"
-                  opacity={isDimmed ? 0.35 : 1}
-                  onMouseEnter={() => setHoveredMonthIdx(idx)}
-                  onMouseLeave={() => setHoveredMonthIdx(null)}
-                  onClick={() => setMonthFilter(isSelected ? null : idx)}
-                >
-                  <rect
-                    x={xBase - 4}
-                    y="22"
-                    width="38"
-                    height="140"
-                    fill={isSelected ? '#FFFDF2' : 'transparent'}
-                    stroke={isSelected ? '#F2C811' : 'none'}
-                  />
-                  {initVal > 0 && (
-                    <>
-                      <rect
-                        x={xBase}
-                        y={142 - hInit}
-                        width="14"
-                        height={Math.max(2, hInit)}
-                        fill="#118DFF"
-                      />
-                      <text
-                        x={xBase + 7}
-                        y={137 - hInit}
-                        textAnchor="middle"
-                        fontSize="9"
-                        fill="#004578"
-                        fontWeight="600"
-                        fontFamily="var(--font-mono)"
-                      >
-                        {initVal}
-                      </text>
-                    </>
-                  )}
-                  {repVal > 0 && (
-                    <>
-                      <rect
-                        x={xBase + 16}
-                        y={142 - hRep}
-                        width="14"
-                        height={Math.max(2, hRep)}
-                        fill="#E66C37"
-                      />
-                      <text
-                        x={xBase + 23}
-                        y={137 - hRep}
-                        textAnchor="middle"
-                        fontSize="9"
-                        fill="#8A3B12"
-                        fontWeight="600"
-                        fontFamily="var(--font-mono)"
-                      >
-                        {repVal}
-                      </text>
-                    </>
-                  )}
-                  <text
-                    x={xBase + 15}
-                    y="158"
-                    textAnchor="middle"
-                    fontSize="10"
-                    fontWeight={isSelected ? '700' : '500'}
-                    fill={isSelected ? '#252423' : '#605E5C'}
-                  >
-                    {mName}
-                  </text>
-                </g>
-              );
-            })}
-          </svg>
+          <div className={inFocus ? 'h-72 w-full' : 'h-48 w-full'}>
+            <ChartJsMixed
+              type="bar"
+              data={chartData as ChartData<'bar', number[], string>}
+              options={chartOptions as ChartOptions<'bar'>}
+            />
+          </div>
         </div>
       </div>
     );
   };
 
-  const renderDocsVisual = (inFocus = false) => (
-    <div className="flex h-full flex-col bg-white border border-[#E1DFDD]">
-      {renderVisualHeader(
-        'Couverture des Preuves (Collections 0..4 docs)',
-        'Cliquer 0 document pour isoler les recommandations sans preuve',
-        'docs',
-        () => setActivePage('details')
-      )}
-      <div className={`flex-1 space-y-3 p-4 ${inFocus ? 'p-6' : ''}`}>
-        {docDistribution.map((cnt, docNb) => {
-          const pct =
-            filteredRows.length > 0 ? Math.round((cnt / filteredRows.length) * 100) : 0;
-          const barColor =
-            docNb === 0
-              ? '#D13438'
-              : docNb === 1
-              ? '#E66C37'
-              : docNb === 2
-              ? '#118DFF'
-              : docNb === 3
-              ? '#744DA9'
-              : '#107C10';
-          const isZeroSelected = docNb === 0 && docCountFilter === '0';
-          const isDocsSelected = docNb > 0 && docCountFilter === '1-4';
+  const renderDocsVisual = (inFocus = false) => {
+    const maxDocCount = d3.max(docDistribution) ?? 1;
+    const xScale = d3
+      .scaleLinear()
+      .domain([0, Math.max(1, maxDocCount)])
+      .range([0, 100]);
 
-          return (
-            <button
-              key={docNb}
-              type="button"
-              onClick={() => {
-                if (docNb === 0) {
-                  setDocCountFilter((prev) => (prev === '0' ? 'all' : '0'));
-                } else {
-                  setDocCountFilter((prev) => (prev === '1-4' ? 'all' : '1-4'));
-                }
-              }}
-              className={`block w-full border px-2.5 py-2 text-left transition-colors cursor-pointer ${
-                isZeroSelected || isDocsSelected
-                  ? 'border-[#F2C811] bg-[#FFFDF2]'
-                  : 'border-transparent hover:border-[#E1DFDD] hover:bg-[#FAF9F8]'
-              }`}
-            >
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold text-[#252423]">
-                  {docNb} document{docNb > 1 ? 's' : ''}
-                  {docNb === 0 ? ' (sans justificatif)' : ''}
-                </span>
-                <span className="font-mono font-semibold text-[#323130] tabular-nums">
-                  {cnt} ({pct} %)
-                </span>
-              </div>
-              <div className="mt-1.5 h-2.5 w-full overflow-hidden bg-[#F3F2F1]">
-                <div
-                  style={{ width: `${pct}%`, backgroundColor: barColor }}
-                  className="h-full"
-                />
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
+    const docPalette = ['#D13438', '#E66C37', '#118DFF', '#744DA9', '#107C10'];
+    const totalCount = Math.max(1, filteredRows.length);
 
-  const renderDirectionsVisual = (inFocus = false) => (
-    <div className="flex h-full flex-col bg-white border border-[#E1DFDD]">
-      {renderVisualHeader(
-        `Exposition par Direction (${directionStats.length})`,
-        'Cliquer sur une direction pour filtrer le rapport',
-        'directions',
-        () => setActivePage('details')
-      )}
-      <div className={`flex-1 space-y-2 overflow-y-auto p-4 ${inFocus ? 'max-h-none' : 'max-h-[290px]'}`}>
-        {directionStats.map((d) => {
-          const isSelected = directionFilter === d.direction;
-          const pctDone = Math.round((d.realise / Math.max(1, d.total)) * 100);
-          return (
-            <button
-              key={d.direction}
-              type="button"
-              onClick={() => setDirectionFilter(isSelected ? 'all' : d.direction)}
-              className={`w-full border px-3 py-2 text-left transition-colors cursor-pointer ${
-                isSelected
-                  ? 'border-[#F2C811] bg-[#FFFDF2]'
-                  : 'border-[#EDEBE9] bg-[#FAF9F8] hover:border-[#C8C6C4]'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-2 text-xs">
-                <span className="truncate font-semibold text-[#252423]">{d.direction}</span>
-                <div className="flex items-center gap-2 shrink-0 font-mono text-[11px] tabular-nums">
-                  {d.critOpen > 0 && (
-                    <span className="font-semibold text-[#A4262C]">
-                      {d.critOpen} crit. ouv.
-                    </span>
-                  )}
-                  <span className="text-[#323130]">
-                    {d.realise}/{d.total} ({pctDone} %)
+    return (
+      <div className="flex h-full flex-col bg-white border border-[#E1DFDD]">
+        {renderVisualHeader(
+          'Couverture des Preuves 0..4 docs (D3.js)',
+          'Échelle linéaire D3 · Cliquer 0 document pour isoler les recos sans preuve',
+          'docs',
+          () => setActivePage('details')
+        )}
+        <div className={`flex-1 space-y-2.5 p-4 ${inFocus ? 'p-6' : ''}`}>
+          {/* Axe gradué D3 */}
+          <div className="mb-1 flex items-center justify-between border-b border-[#EDEBE9] pb-1 font-mono text-[10px] text-[#605E5C] tabular-nums">
+            <span>Échelle D3 (0 → {maxDocCount} recos max)</span>
+            <span>Part relative (%)</span>
+          </div>
+
+          {docDistribution.map((cnt, docNb) => {
+            const pct = filteredRows.length > 0 ? Math.round((cnt / totalCount) * 100) : 0;
+            const scaledWidthPct = Math.max(cnt > 0 ? 3 : 0, xScale(cnt));
+            const barColor = docPalette[docNb] ?? '#107C10';
+            const isZeroSelected = docNb === 0 && docCountFilter === '0';
+            const isDocsSelected = docNb > 0 && docCountFilter === '1-4';
+
+            return (
+              <button
+                key={docNb}
+                type="button"
+                onClick={() => {
+                  if (docNb === 0) {
+                    setDocCountFilter((prev) => (prev === '0' ? 'all' : '0'));
+                  } else {
+                    setDocCountFilter((prev) => (prev === '1-4' ? 'all' : '1-4'));
+                  }
+                }}
+                className={`block w-full border px-2.5 py-2 text-left transition-colors cursor-pointer ${
+                  isZeroSelected || isDocsSelected
+                    ? 'border-[#F2C811] bg-[#FFFDF2]'
+                    : 'border-transparent hover:border-[#E1DFDD] hover:bg-[#FAF9F8]'
+                }`}
+              >
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-[#252423]">
+                    {docNb} document{docNb > 1 ? 's' : ''}
+                    {docNb === 0 ? ' (sans justificatif)' : ''}
+                  </span>
+                  <span className="font-mono font-semibold text-[#323130] tabular-nums">
+                    {cnt} ({pct} %)
                   </span>
                 </div>
-              </div>
-              <div className="mt-1.5 flex h-2 w-full overflow-hidden bg-[#E1DFDD]">
-                <div
-                  style={{
-                    width: `${pctDone}%`,
-                    backgroundColor: STATUT_COLORS['Réalisé'],
-                  }}
-                />
-                <div
-                  style={{
-                    width: `${100 - pctDone}%`,
-                    backgroundColor: d.critOpen > 0 ? STATUT_COLORS['Non réalisé'] : '#C8C6C4',
-                  }}
-                />
-              </div>
-            </button>
-          );
-        })}
+                <svg
+                  viewBox="0 0 100 10"
+                  preserveAspectRatio="none"
+                  className="mt-1.5 h-2.5 w-full overflow-visible"
+                  aria-hidden="true"
+                >
+                  <rect x="0" y="2" width="100" height="6" rx="1.5" fill="#F3F2F1" />
+                  <rect
+                    x="0"
+                    y="1.5"
+                    width={scaledWidthPct}
+                    height="7"
+                    rx="1.5"
+                    fill={barColor}
+                  />
+                </svg>
+              </button>
+            );
+          })}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
+
+  const renderDirectionsVisual = (inFocus = false) => {
+    const visibleDirs = inFocus ? directionStats : directionStats.slice(0, 8);
+    const chartData: ChartData<'bar', number[], string> = {
+      labels: visibleDirs.map((d) =>
+        d.direction.length > 26 ? `${d.direction.slice(0, 25)}…` : d.direction
+      ),
+      datasets: [
+        {
+          label: 'Réalisé',
+          data: visibleDirs.map((d) => d.realise),
+          backgroundColor: visibleDirs.map((d) =>
+            directionFilter === 'all' || directionFilter === d.direction
+              ? STATUT_COLORS['Réalisé']
+              : 'rgba(16, 124, 16, 0.25)'
+          ),
+          borderRadius: 2,
+          barPercentage: 0.68,
+        },
+        {
+          label: 'Ouvert / Non clôturé',
+          data: visibleDirs.map((d) => d.open),
+          backgroundColor: visibleDirs.map((d) => {
+            const baseColor = d.critOpen > 0 ? STATUT_COLORS['Non réalisé'] : '#E66C37';
+            return directionFilter === 'all' || directionFilter === d.direction
+              ? baseColor
+              : 'rgba(209, 52, 56, 0.25)';
+          }),
+          borderRadius: 2,
+          barPercentage: 0.68,
+        },
+      ],
+    };
+
+    const chartOptions: ChartOptions<'bar'> = {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      onClick: (_event, elements) => {
+        if (elements && elements.length > 0) {
+          const item = visibleDirs[elements[0].index];
+          if (item) {
+            setDirectionFilter(
+              directionFilter === item.direction ? 'all' : item.direction
+            );
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          position: 'top',
+          align: 'start',
+          labels: {
+            boxWidth: 10,
+            boxHeight: 10,
+            font: { size: 10 },
+            color: '#605E5C',
+          },
+        },
+        tooltip: {
+          backgroundColor: '#FFFFFF',
+          titleColor: '#252423',
+          bodyColor: '#323130',
+          borderColor: '#E1DFDD',
+          borderWidth: 1,
+          padding: 8,
+          callbacks: {
+            afterBody: (items) => {
+              const idx = items[0]?.dataIndex ?? -1;
+              const d = visibleDirs[idx];
+              if (!d) return '';
+              const pctDone = Math.round((d.realise / Math.max(1, d.total)) * 100);
+              return `Avancement : ${pctDone} % · Critiques ouvertes : ${d.critOpen}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          beginAtZero: true,
+          ticks: { precision: 0, color: '#605E5C', font: { size: 10 } },
+          grid: { color: '#EDEBE9' },
+        },
+        y: {
+          stacked: true,
+          grid: { display: false },
+          ticks: { color: '#252423', font: { size: 10, weight: 600 } },
+        },
+      },
+    };
+
+    const containerHeight = Math.max(220, visibleDirs.length * (inFocus ? 38 : 30));
+
+    return (
+      <div className="flex h-full flex-col bg-white border border-[#E1DFDD]">
+        {renderVisualHeader(
+          `Exposition par Direction (${directionStats.length}) · Chart.js`,
+          'Cliquer sur une barre pour filtrer le rapport par direction',
+          'directions',
+          () => setActivePage('details')
+        )}
+        <div className={`flex-1 overflow-y-auto p-4 ${inFocus ? 'max-h-none' : 'max-h-[305px]'}`}>
+          {visibleDirs.length === 0 ? (
+            <div className="border border-dashed border-[#E1DFDD] p-6 text-center text-xs text-[#605E5C]">
+              Aucune direction ne correspond aux filtres actifs.
+            </div>
+          ) : (
+            <div style={{ width: '100%', height: containerHeight }}>
+              <ChartJsBar data={chartData} options={chartOptions} />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderDetailsTableSection = () => (
     <section
@@ -2117,6 +2297,18 @@ export const SuiviRecosAnalyticsDashboard: React.FC<
             >
               <Table2 className="h-3.5 w-3.5" aria-hidden="true" />
               Détail source
+            </button>
+          )}
+
+          {onShareSuiviRecos && (
+            <button
+              type="button"
+              onClick={() => onShareSuiviRecos(scopeRootId)}
+              title="Partager ce suivi des recommandations par URL (opérationnels / équipe sans compte)"
+              className="inline-flex items-center gap-1.5 bg-[#107C10] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#0B5A0B] whitespace-nowrap shrink-0 cursor-pointer"
+            >
+              <Share2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Partager
             </button>
           )}
 

@@ -105,39 +105,38 @@ export const AuditChatWorkspace: React.FC<AuditChatWorkspaceProps> = ({
               <p className="mt-2 text-sm leading-relaxed text-slate-700">{msg.content}</p>
 
               {msg.table && (
-                <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
-                  <table className="w-full border-collapse text-left text-xs">
-                    <caption className="border-b border-slate-200 bg-slate-50 px-3 py-2 text-left font-medium text-slate-800">
-                      {msg.table.caption}
-                    </caption>
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50/60 text-slate-600">
-                        {msg.table.headers.map((header, i) => (
-                          <th key={i} className="px-3 py-2 font-semibold whitespace-nowrap">
-                            {header}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 bg-white text-slate-700">
-                      {msg.table.rows.map((row, rIdx) => (
-                        <tr key={rIdx} className="hover:bg-slate-50/60">
-                          {row.map((cell, cIdx) => (
-                            <td
-                              key={cIdx}
-                              className={`px-3 py-2.5 ${
-                                cIdx === row.length - 1
-                                  ? 'font-mono text-[11px] font-medium text-slate-900 tabular-nums whitespace-nowrap'
-                                  : ''
-                              }`}
-                            >
-                              {cell}
-                            </td>
+                <div className="mt-3 overflow-hidden rounded-lg border border-slate-300/90 bg-white shadow-[0_6px_18px_-3px_rgba(15,23,42,0.22),0_3px_8px_-2px_rgba(15,23,42,0.14)]">
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead>
+                        <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
+                          {msg.table.headers.map((header, i) => (
+                            <th key={i} className="px-3.5 py-2.5 whitespace-nowrap">
+                              {header}
+                            </th>
                           ))}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 bg-white text-slate-800">
+                        {msg.table.rows.map((row, rIdx) => (
+                          <tr key={rIdx} className="divide-x divide-slate-200 bg-white">
+                            {row.map((cell, cIdx) => (
+                              <td
+                                key={cIdx}
+                                className={`px-3.5 py-2.5 transition-colors hover:bg-[#EAF4FF] hover:ring-1 hover:ring-inset hover:ring-sky-500 ${
+                                  cIdx === row.length - 1
+                                    ? 'font-mono text-[11px] font-medium text-slate-900 tabular-nums whitespace-nowrap'
+                                    : ''
+                                }`}
+                              >
+                                {cell}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
             </article>

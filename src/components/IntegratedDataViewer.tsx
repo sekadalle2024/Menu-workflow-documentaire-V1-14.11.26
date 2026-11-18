@@ -218,70 +218,96 @@ export const IntegratedDataViewer: React.FC<IntegratedDataViewerProps> = ({
                 : 'Aucune table disponible pour ce document.'}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {tables.map((tableObj, tableIdx) => {
                 const [tableTitle, rows] = Object.entries(tableObj)[0] || ['', []];
                 if (!tableTitle || !Array.isArray(rows) || rows.length === 0) return null;
                 const columns = Object.keys(rows[0]);
+                const renderAsRubriqueDesc =
+                  /^table\s*[01](\b|$)/i.test(tableTitle.trim()) &&
+                  rows.length === 1 &&
+                  columns.length >= 2;
 
                 return (
                   <div
                     key={`${tableTitle}-${tableIdx}`}
-                    className="overflow-hidden rounded-md border border-slate-200 bg-white"
+                    className="overflow-hidden rounded-lg border border-slate-300/90 bg-white shadow-[0_6px_18px_-3px_rgba(15,23,42,0.22),0_3px_8px_-2px_rgba(15,23,42,0.14)]"
                   >
-                    <div className="border-b border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-700">
-                      {tableTitle}
-                    </div>
                     <div className="overflow-x-auto">
-                      <table className="w-full border-collapse text-left text-[11px]">
-                        <thead>
-                          <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold text-slate-600">
-                            {columns.map((col) => (
-                              <th key={col} className="px-2 py-1.5 whitespace-nowrap">
-                                {col}
+                      {renderAsRubriqueDesc ? (
+                        <table className="w-full border-collapse text-left text-xs">
+                          <thead>
+                            <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
+                              <th className="w-[28%] min-w-[140px] max-w-[230px] px-3.5 py-2.5 whitespace-nowrap">
+                                Rubrique
                               </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 text-slate-800">
-                          {rows.map((row, rIdx) => (
-                            <tr
-                              key={rIdx}
-                              className={
-                                row.Conclusion === 'Non-satisfaisant'
-                                  ? 'bg-red-50/70'
-                                  : 'hover:bg-slate-50/70'
-                              }
-                            >
-                              {columns.map((col) => {
-                                const val = row[col] ?? '';
-                                const isNonSat = col === 'Conclusion' && val === 'Non-satisfaisant';
-                                const isSat = col === 'Conclusion' && val === 'Satisfaisant';
-                                const isNeg = col.startsWith('CTR') && val === '-';
-                                const isPos = col.startsWith('CTR') && val === '+';
-                                return (
-                                  <td
-                                    key={col}
-                                    className={`px-2 py-1.5 align-top ${
-                                      columns.length > 5 && col !== 'Description'
-                                        ? 'whitespace-nowrap'
-                                        : 'min-w-[120px]'
-                                    } ${
-                                      isNonSat || isNeg
-                                        ? 'font-semibold text-red-700'
-                                        : isSat || isPos
-                                        ? 'font-semibold text-emerald-700'
-                                        : ''
-                                    }`}
-                                  >
-                                    {val || '—'}
-                                  </td>
-                                );
-                              })}
+                              <th className="px-3.5 py-2.5 whitespace-nowrap">Description</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 bg-white text-slate-800">
+                            {columns.map((col) => (
+                              <tr key={col} className="divide-x divide-slate-200 bg-white">
+                                <td className="px-3.5 py-2.5 font-medium text-slate-700 transition-colors hover:bg-[#EAF4FF] hover:ring-1 hover:ring-inset hover:ring-sky-500">
+                                  {col}
+                                </td>
+                                <td className="px-3.5 py-2.5 text-slate-800 transition-colors hover:bg-[#EAF4FF] hover:ring-1 hover:ring-inset hover:ring-sky-500">
+                                  {rows[0][col] || '—'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      ) : (
+                        <table className="w-full border-collapse text-left text-xs">
+                          <thead>
+                            <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
+                              {columns.map((col) => (
+                                <th key={col} className="px-3.5 py-2.5 whitespace-nowrap">
+                                  {col}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-200 bg-white text-slate-800">
+                            {rows.map((row, rIdx) => (
+                              <tr
+                                key={rIdx}
+                                className={`divide-x divide-slate-200 ${
+                                  row.Conclusion === 'Non-satisfaisant'
+                                    ? 'bg-red-50/55'
+                                    : 'bg-white'
+                                }`}
+                              >
+                                {columns.map((col) => {
+                                  const val = row[col] ?? '';
+                                  const isNonSat = col === 'Conclusion' && val === 'Non-satisfaisant';
+                                  const isSat = col === 'Conclusion' && val === 'Satisfaisant';
+                                  const isNeg = col.startsWith('CTR') && val === '-';
+                                  const isPos = col.startsWith('CTR') && val === '+';
+                                  return (
+                                    <td
+                                      key={col}
+                                      className={`px-3 py-2.5 align-top transition-colors hover:bg-[#EAF4FF] hover:ring-1 hover:ring-inset hover:ring-sky-500 ${
+                                        columns.length > 5 && col !== 'Description'
+                                          ? 'whitespace-nowrap'
+                                          : 'min-w-[120px]'
+                                      } ${
+                                        isNonSat || isNeg
+                                          ? 'font-semibold text-red-700'
+                                          : isSat || isPos
+                                          ? 'font-semibold text-emerald-700'
+                                          : ''
+                                      }`}
+                                    >
+                                      {val || '—'}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
                     </div>
                   </div>
                 );

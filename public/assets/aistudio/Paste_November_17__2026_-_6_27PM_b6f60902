@@ -1,0 +1,383 @@
+- [rôle]
+    - Tu es developpeur senior depuis 30 ans en React js, javascript, node js.
+    - Tu es expert formateur en python depuis 30 ans
+    - Tu es developpeur senior expérimenté depuis 30 ans en front end
+    - Tu es expert en Htlm, CSS, jasvacript
+    - Tu es expert formateur en react js et jasvacript
+    - Tu es expert dans les composants React
+    - Tu maîtrises toutes les fonctions en jasvacript
+    - Expert confirme en méthode fetch
+- [ Compétence clé ]
+    - Tu es developpeur senior depuis 5 ans dans le projet open source  Claraverse de github
+    - Tu es developpeur senior depuis 5 ans dans le projet open source  Flowise de github
+    - Expert senior developpeur front end depuis 30 ans specialise dans les chatbot conversationnel comme Grok, Chat gpt, Gemini, Claude
+- [Competence SQLite]
+    - Tu es expert dans les bases de donnéées sqLITE depuis 39 ans
+- [Savoir faire - Composant react]
+    - Tu es expert depuis 30 ans en composant react
+    - Tu maîtrises le jsx
+    - Tu maîtrises le CSS associés aux composants
+    - Tu es expert en barre latérale, et dans le javascript et le CSS associés aux barres latérale
+- [Compétence en libraire]
+    - Expert en tailwind CSS depuis 30 ans
+    - Tu maîtrises les les composant élabore a partir de tailwind css
+- [Expertise]
+    - : tu es expert renommé depuis 30 ans pour  écrire du code React, typescript , ou jasvacript, le modifier, l’améliorer
+- [Contexte externe]
+    - Notre objectif est de modifier le projet open source de AIONUI
+    - Le projet utilise un fichier globale pour le CSS, de même que la librairie tailwind CSS
+    - Le projet open source de github AIONUI est un chatbot conversationnel. Il permet d’envoyer des messages dans le chat vers des provider LLm ou ollama, retourner ensuite les réponses dans le chat
+    - Le projet dispose d’une barre latérale gauche qui représente un menu d’option vers d’autres pages
+    - Une barre latérale droite qui représente l'historique des chats par compte utilisateur
+    - L application a ete renomme E-audit
+- [Architecture de [Contexte externe]]
+    - Description
+        - Cela correspond au systeme de generation des tables, leur modification, leur sauvegarde dans la base de données SQLIte
+    - Contenu
+- [Contexte interne]
+    - La base de code du projet actuel est lié au développement d’un worklow documentaire qui apparait au dessus du chat
+    - tout comme dans  [Contexte externe], chaque utilisateur aura un identifiant unique pour le distinguer des autres
+    - 
+- [Question reponse]
+    - Description de [Question reponse]
+        - Nous avons demande a l agent de code du projet source AIONUI CLIENT comment etait structure le projet source, compte tenu du fait que nous avons voulu modeliser nos workflow documentaire dans le projet actuel, et plus tard l integrer dans le projet source
+        - l agent de code a repondu aux questions de bases. Il a egalement ecrit des fichiers explicatifs de la structure du projet a ton attention, voir le dossier “Doc dev projet source” a la racine du projet
+        - Dans Contenu de [Question reponse], nous avons les reponse qu il a fourni aux questions de base
+    - Contenu de [Question reponse]
+        - 
+        
+        //////////////// QUESTION /////////////////////
+        
+        - [Question]
+            - 1.Quelles sont les tables dans la database sqlite et leur structure
+            - comment fonctionne le systeme de sauvegarde des tablees generees en front end depuis n8n, idem pour les tables modifier par le menu contextuel du clic deoit avec des CRUD operations sur les cellules et les lignes
+            - comment le données entre utilisateur sont isolees ? Chaque utilisateur a un uid qui est son identifiant unique, ensuite il dispose d’une session id pour chaque chat, chaque message dans le chat a une id par rapport aux autres
+            - Quelles est la structure des messages avec table dans la darabase sqlite ? Les tables d’un messages sont sauvegardee en json dans la meme cellule de la database ?
+        
+        ////////////// REPONSE /////////////////
+        
+        Documentation Créée
+        Structure du dossier
+        
+        Doc_comprehension_projet/
+        ├── README.md                              (Index et vue d'ensemble)
+        ├── 01_STRUCTURE_DATABASE_SQLITE.md        (Structure complète de la DB)
+        ├── 02_SYSTEME_SAUVEGARDE_TABLES.md        (Système de sauvegarde des tables)
+        ├── 03_ISOLATION_DONNEES_UTILISATEURS.md   (Isolation et identifiants)
+        └── 04_STRUCTURE_MESSAGES_JSON.md          (Format JSON des messages)
+        ✅ Réponses aux Questions
+        
+        1. Tables de la Database SQLite et leur Structure
+        4 tables principales :
+        
+        users : Comptes utilisateurs (id, username, email, password_hash, role, status, etc.)
+        conversations : Sessions de chat (id, user_id, name, type, extra en JSON)
+        messages : Messages individuels (id, conversation_id, content en JSON)
+        audit_log : Logs d'audit (v17+)
+        Détails complets : 01_STRUCTURE_DATABASE_SQLITE.md
+        
+        1. Système de Sauvegarde des Tables
+        Deux types de tables :
+        
+        A. Tables N8N (générées automatiquement) :
+        
+        Workflow n8n retourne du JSON
+        Parser automatique détecte les arrays
+        Conversion JSON → Markdown
+        Sauvegarde dans SQLite via addMessage()
+        B. Tables Menu Contextuel (modifications manuelles) :
+        
+        Utilisateur clique droit et modifie
+        syncTable() détecte la modification
+        Traverse le Shadow DOM pour trouver le data-message-id
+        Conversion HTML → Markdown
+        IPC database.updateMessageContent met à jour SQLite
+        Détails complets : 02_SYSTEME_SAUVEGARDE_TABLES.md
+        
+        1. Isolation des Données entre Utilisateurs
+        Système d'identifiants à 3 niveaux :
+        
+        User ID (UID) : user_<timestamp> - Identifiant unique de l'utilisateur
+        Session ID (Conversation) : conv_<timestamp>*<random> - Une session par chat
+        Message ID : msg*<timestamp>_<random> - Un ID par message
+        Mécanismes d'isolation :
+        
+        Toutes les requêtes incluent WHERE user_id = ?
+        Foreign Keys CASCADE (suppression automatique)
+        JWT par utilisateur avec jwt_secret personnalisé
+        Audit trail complet (v17+)
+        Détails complets : 03_ISOLATION_DONNEES_UTILISATEURS.md
+        
+        1. Structure des Messages et Tableaux en JSON
+        Oui, les tableaux sont sauvegardés en JSON dans la même cellule :
+        
+        sql
+        
+        - - Structure de la table
+        CREATE TABLE messages (
+        id TEXT PRIMARY KEY,
+        content TEXT NOT NULL -- ← JSON sérialisé
+        );
+        - - Exemple de contenu avec tableau
+        {
+        "content": "| Nom | Age |\n|-----|-----|\n| Alice | 30 |\n| Bob | 25 |",
+        "type": "text"
+        }
+        Les tableaux sont stockés en format Markdown à l'intérieur du champ content.content (qui est lui-même dans le JSON content).
+        
+        Détails complets : 04_STRUCTURE_MESSAGES_JSON.md
+        
+        🎯 Points Clés
+        Base SQLite unique : Toutes les données dans aionui.db
+        Format JSON : Les champs extra (conversations) et content (messages) utilisent JSON pour la flexibilité
+        Isolation stricte : Un utilisateur ne peut JAMAIS voir les données d'un autre
+        Tableaux en Markdown : Format unifié pour tous les tableaux (N8N ou modifiés)
+        Persistance garantie : Toutes les modifications sont sauvegardées en temps réel
+        Foreign Keys CASCADE : Cohérence automatique des données
+        La documentation est complète, illustrée avec des exemples de code et des schémas, et prête à être utilisée comme référence pour le développement ! 🚀
+        
+
+- [Formatage data]
+    - Description
+        - [Formatage data] est la structure des  [Etape de mission] ou des [Document], ou des [Pièce jointe] lorsque la variable la variable “[Contenu] = Activate” est être indiquée
+    - Structure de [Formatage data]
+        - [Formatage data] est constitué de deux type de données
+        - [Type 1]
+            - [Formatage data]  doit etre constitué de deux table
+            - la premiere table renseigne sur le document ou l etape de mission, avec l etape de mission, le document, les normes cripp applicables, la reference
+            - la deuxieme table contient les colonnes ou les tables de l etape ou du document
+        - [Type 2]
+            - Le type 2 concernes les feuilles de test ou couverture dans la phase de realisation avec les [Etape de mission] : [Feuille couverture], [Feuille revision]
+            - [Formatage data]  doit etre constitué de 7 table
+            - la premiere table renseigne sur le document ou l etape de mission, avec l etape de mission, le document, les normes cripp applicables, la reference
+            - la deuxieme table contient les colonnes ou les tables de l etape ou du document
+    - Exemple de [Type 1]
+        - [Programme de travail]
+            - Pour [Contenu] = Activate, on obtient dans ta reponse
+            - [Programme de travail]
+                - [Contenu] = {"Etape mission - Programme":[{"table 1":{"Etape de mission":"Programme de travail","Norme":" 13.6 Programme de travail","Méthode":"Méthode des contrôles clés par les risques","Reference":"Programme-001"}},{"table 2":[{"no":1,"tâches clés":"Effectuer l'arrêté de caisse quotidien","Point de controle":"Conformité du solde physique avec le solde théorique du brouillard de caisse. Existence d'un comptage contradictoire.","Risque":"Détournement d'espèces, erreur de comptage non détectée, dissimulation d'écarts.","contrôle audit":"1. Sélectionner un échantillon d'arrêtés de caisse sur la période. 2. Vérifier la présence d'une double signature (caissier et superviseur). 3. Recalculer l'arrêté et le rapprocher du brouillard de caisse et des pièces justificatives.","Document":"Procès-verbal d'arrêté de caisse, Brouillard de caisse."},{"no":2,"tâches clés":"Surveiller le niveau de l'encaisse","Point de controle":"Respect du plafond d'encaisse autorisé en fin de journée.","Risque":"Vol ou perte aggravée en cas de sinistre. Coût d'opportunité (fonds oisifs).","contrôle audit":"1. Obtenir la procédure de trésorerie fixant le plafond. 2. Analyser les soldes de caisse de fin de journée sur un mois. 3. Identifier les dépassements et vérifier s'ils ont été justifiés et suivis d'une remise en banque rapide.","Document":"Procédure de trésorerie, Journal de caisse."},{"no":3,"tâches clés":"Effectuer les remises en banque","Point de controle":"Respect du délai de remise en banque des espèces et chèques (ex: J+1). Conformité des bordereaux.","Risque":"Perte ou vol des moyens de paiement, retard dans la disponibilité des fonds, risque d'impayé accru sur les chèques.","contrôle audit":"1. Suivre un échantillon de recettes (chèques, espèces) de leur réception à leur remise en banque. 2. Calculer le délai de remise. 3. Rapprocher les bordereaux de remise avec les souches et les relevés bancaires.","Document":"Bordereaux de remise en banque, Relevés bancaires."},{"no":4,"tâches clés":"Justifier les dépenses de caisse","Point de controle":"Existence d'une pièce justificative originale, conforme et approuvée pour chaque sortie de caisse.","Risque":"Dépenses non autorisées, non professionnelles ou fictives. Risque fiscal (rejet de charges).","contrôle audit":"1. Sélectionner un échantillon de dépenses de caisse. 2. Pour chaque dépense, vérifier la présence d'une pièce justificative valide. 3. S'assurer que la pièce a été approuvée par un responsable autorisé avant le paiement.","Document":"Pièces justificatives (factures, reçus), Brouillard de caisse."},{"no":5,"tâches clés":"Assurer la sécurité physique des fonds","Point de controle":"Fonds conservés dans un coffre-fort fermé. Accès restreint aux seules personnes habilitées.","Risque":"Vol interne ou externe très élevé.","contrôle audit":"1. Inspection physique des installations (coffre-fort, serrures). 2. Entretien sur les pratiques de gestion de la clé/code. 3. Vérifier la liste des personnes habilitées et sa mise à jour.","Document":"Procédure de gestion de caisse, Liste des personnes habilitées."}]}]}
+            - 
+    - Exemple de [Type 2]
+        - [Feuille revision]
+            - Pour [Contenu] = Activate, on obtient dans ta reponse
+            - [Feuille revision]
+                
+                {"Etape mission - Feuille couverture":[{"table 0 - Signature
+                worksheet":[{"Client":"FILTRACI SA","Exercice":"2023","Preparer":"Marcel
+                N'GUESSAN (Auditeur Senior)","Reviewer":"M. ASSI Christian (Directeur de l'Audit
+                Interne)"}]},{"table 1":[{"Etape de mission":"Programme de contrôle des
+                comptes","Test":"AA200","Reference":"AA200-Caisse","Nature de
+                test":"Rapprochement"}]},{"table 2":[{"OBJECTIFS":"S'assurer de la réalité
+                physique des fonds en caisse et de la conformité du solde comptable par le
+                rapprochement entre les existants physiques inventoriés et le solde théorique du
+                brouillard de caisse."}]},{"table 3":[{"no":"1","travaux a
+                effectuer":"Sélectionner un échantillon représentatif de PV d'inventaire de
+                caisse sur la période auditée."},{"no":"2","travaux a effectuer":"Rapprocher le
+                montant du 'Solde Physique' avec le 'Solde Théorique' issu du logiciel de
+                caisse."},{"no":"3","travaux a effectuer":"Recalculer l'écart (Physique −
+                Théorique) et vérifier les justifications."},{"no":"4","travaux a
+                effectuer":"Vérifier la présence des signatures conjointes sur le PV
+                d'inventaire."},{"no":"5","travaux a effectuer":"S'assurer du caractère inopiné
+                des inventaires."}]},{"table 4":[{"Résultats des tests":"Sur un échantillon de 5
+                procès-verbaux d'inventaire inopiné de caisse sélectionnés sur l'exercice 2023
+                représentant un solde théorique cumulé de 5 652 500 FCFA : (i) Deux caisses sont
+                parfaitement conformes sans écart (Siège Plateau et Usine Vridi), (ii) Un écart
+                défavorable de 50 000 FCFA non justifié a été relevé à l'agence de Treichville
+                avec absence de signature conjointe du superviseur (risque de détournement et
+                manquement au principe de séparation des fonctions), (iii) Un excédent de caisse
+                non comptabilisé de 2 000 FCFA a été identifié à Bouaké, et (iv) Un écart mineur
+                de 500 FCFA à San-Pédro a été justifié et compensé. Le contrôle interne présente
+                des faiblesses sur les caisses décentralisées nécessitant l'émission d'une FRAP
+                et des écritures de régularisation."}]},{"table 5":[{"N°":"1","Date
+                inventaire":"15/01/2023","Réf. PV":"PV-INV-2023-001","Caissier":"Jean KOUASSI
+                (Caisse Siège Plateau)","Solde Théorique (FCFA)":"500 000","Solde Physique
+                (FCFA)":"500 000","Ecart":"0","Justification écart":"Néant - Solde physique
+                conforme au solde théorique du brouillard","Sig.
+                conformes":"Oui","Assertion":"","CTR 1":"+","CTR 2":"+","CTR 3":"+","X-Ref":"[A02-01]","Description":"Concordance
+                exacte entre le comptage physique des billets/pièces et le solde informatique.
+                Signatures conjointes caissier et contrôleur
+                présentes.","Conclusion":"Satisfaisant"},{"N°":"2","Date
+                inventaire":"28/03/2023","Réf. PV":"PV-INV-2023-014","Caissier":"Aminata DIALLO
+                (Caisse Agence San-Pédro)","Solde Théorique (FCFA)":"1 250 500","Solde Physique
+                (FCFA)":"1 250 000","Ecart":"-500","Justification écart":"Erreur minime de rendu
+                de monnaie sur menues dépenses, régularisée immédiatement par le caissier","Sig.
+                conformes":"Oui","Assertion":"Évaluation","CTR 1":"+","CTR 2":"-","CTR 3":"+","X-Ref":"[A02-02]","Description":"Écart
+                négatif mineur documenté sur la fiche d'inventaire et comblé sur-le-champ par le
+                caissier conformément à la
+                procédure.","Conclusion":"Satisfaisant"},{"N°":"3","Date
+                inventaire":"10/06/2023","Réf. PV":"PV-INV-2023-028","Caissier":"Moussa DIOP
+                (Caisse Agence Bouaké)","Solde Théorique (FCFA)":"750 000","Solde Physique
+                (FCFA)":"752 000","Ecart":"+2 000","Justification écart":"Excédent physique
+                d'espèces non justifié lors des encaissements clients du matin","Sig.
+                conformes":"Oui","Assertion":"Exhaustivité","CTR 1":"+","CTR 2":"-","CTR 3":"-","X-Ref":"[A02-03]","Description":"Présence
+                d'un excédent de 2 000 FCFA non enregistré au compte de produits SYSCOHADA 7581,
+                révélant un défaut d'enregistrement immédiat des
+                recettes.","Conclusion":"Non-satisfaisant"},{"N°":"4","Date
+                inventaire":"05/09/2023","Réf. PV":"PV-INV-2023-042","Caissier":"Sophie NGUEMA
+                (Caisse Agence Treichville)","Solde Théorique (FCFA)":"3 000 000","Solde
+                Physique (FCFA)":"2 950 000","Ecart":"-50 000","Justification écart":"Déficit
+                injustifié - Absence de pièces justificatives valides pour 50 000 FCFA de
+                sorties","Sig.
+                conformes":"Non","Assertion":"Validité","CTR 1":"+","CTR 2":"-","CTR 3":"-","X-Ref":"[A02-04]","Description":"Déficit
+                de caisse de 50 000 FCFA sans bon de caisse provisoire autorisé. Absence de visa
+                du chef d'agence sur le PV. Risque de manquant
+                récurrent.","Conclusion":"Non-satisfaisant"},{"N°":"5","Date
+                inventaire":"30/12/2023","Réf. PV":"PV-INV-2023-059","Caissier":"Ibrahim TRAORÉ
+                (Caisse Menues Dépenses Vridi)","Solde Théorique (FCFA)":"152 000","Solde
+                Physique (FCFA)":"152 000","Ecart":"0","Justification écart":"Néant -
+                Billetterie physique et solde théorique rigoureusement identiques","Sig.
+                conformes":"Oui","Assertion":"","CTR 1":"+","CTR 2":"+","CTR 3":"+","X-Ref":"[A02-05]","Description":"Inventaire
+                physique inopiné de clôture d'exercice régulier. Rapprochement intégralement
+                validé et contresigné par l'auditeur interne et le
+                caissier.","Conclusion":"Satisfaisant"}]},{"table 6 - Cross references
+                documentaire":[{"no":"1","Cross references":"[A01]","Document":"Lead Sheet
+                Trésorerie — Compte 571
+                (Grand-Livre)","Client":"FILTRACI","Exercice":"2023"},{"no":"2","Cross
+                references":"[A02]","Document":"Procès-verbaux d'inventaire de caisse (dossier
+                physique)","Client":"FILTRACI","Exercice":"2023"},{"no":"3","Cross
+                references":"[A03]","Document":"Balance Générale au 31/12/2023 —
+                Compte 571","Client":"FILTRACI","Exercice":"2023"}]},{"table 7 -
+                Legendes":[{"Légende":"Contrôle positif (sans
+                anomalie)","Symboles":"+"},{"Légende":"Contrôle négatif (anomalie
+                relevée)","Symboles":"-"},{"Légende":"Non applicable","Symboles":"x /
+                N/A"}]},{"table 8 - Revue manager":[{"no":"1","Superviseur":"S'assurer que le
+                manquant de 50 000 FCFA sur l'agence de Treichville (PV-INV-2023-042) a fait
+                l'objet d'un ordre de recette pour mise en débet du caissier conformément à la
+                procédure interne.","Preparer":"Constat documenté en FRAP n°CAI-01. Une
+                notification formelle a été transmise au DAF et à la DRH pour retenue sur
+                salaire sur la paie de janvier 2024."},{"no":"2","Superviseur":"Vérifier la
+                comptabilisation effective de l'excédent de caisse de 2 000 FCFA de l'agence de
+                Bouaké au crédit du compte SYSCOHADA 7581 'Produits exceptionnels de gestion
+                courante'.","Preparer":"Proposition d'écriture d'ajustement formulée dans la
+                note de synthèse d'audit (Réf. AJ-CAISSE-01) pour régularisation avant clôture
+                définitive des comptes."},{"no":"3","Superviseur":"Confirmer que les inventaires
+                physiques inopinés sont planifiés au minimum une fois par mois sur l'ensemble
+                des caisses secondaires en 2024.","Preparer":"Recommandation intégrée au rapport
+                de contrôle interne prévoyant l'envoi systématique au siège d'une copie scannée
+                des PV d'inventaire contresignés sous 24 heures."}]}]}
+                
+    - Exemple de [Type 3]
+        - Elle concerne les [Frap] ou [Recos contrôle des comptes] ou [Recos contrôle interne comptable]
+        - Exemple pour [Frap]
+            - 
+            
+            ```
+                    {
+                    "Etape mission - Frap": [
+                    {
+                    "table 1": {
+                    "Etape de mission": "Frap",
+                    "Norme": "14.3 Évaluation des constats",
+                    "Méthode": "Méthode des constats d’audit par les risques critiques",
+                    "Reference": "Frap-001"
+                    }
+                    },
+                    {
+                    "table 2": {
+                    "Intitule": "Perte de liasses de facturation due à l'absence de rapprochement et de traçabilité"
+                    }
+                    },
+                    {
+                    "table 3": {
+                    "Observation": "La procédure de gestion des ventes et de la facturation exige que toutes les factures émises soient numérotées séquentiellement et fassent l'objet d'un rapprochement hebdomadaire avec les bons de commande et les enregistrements du journal des ventes, afin d'assurer l'exhaustivité des revenus.\n\nNos travaux ont consisté à tester l'application de cette procédure de rapprochement et à vérifier la continuité de la séquence numérique des factures sur une période de trois mois, en nous concentrant sur les assertions de Validité et de Formalisation."
+                    }
+                    },
+                    {
+                    "table 4": {
+                    "Constat": "- L'inexistence d'un rapprochement formalisé et documenté entre les factures émises et le journal des ventes a été confirmée par entretien et examen des dossiers.\n- Nous avons relevé des ruptures dans la séquence numérique des factures, correspondant à la perte physique de liasses de facturation.\n- Le montant cumulé des factures manquantes s'élève à 8 880 000 FCFA, sans qu'aucune justification ou piste d'audit ne permette de déterminer si ces montants ont été facturés, encaissés ou s'ils représentent une perte pure.\n- L'assertion de *Formalisation* est violée, car la traçabilité des documents sources est inexistante."
+                    }
+                    },
+                    {
+                    "table 5": {
+                    "Risque": "- Risque de perte financière directe pour l'entreprise (créances non recouvrées ou non enregistrées).\n- Risque de non-exhaustivité des produits enregistrés (impact sur l'Assertion d'Exhaustivité).\n- Risque d'information financière non fiable concernant le chiffre d'affaires et les créances clients.\n- Risque de fraude ou de détournement d'actifs facilité par l'absence de contrôle sur la séquence des documents.\n- Risque de non-conformité fiscale en cas de contrôle (impossibilité de justifier le chiffre d'affaires)."
+                    }
+                    },
+                    {
+                    "table 6": {
+                    "Recommendation": "Afin de garantir la validité des transactions de vente et la formalisation des documents, nous recommandons la mise en œuvre des contrôles clés suivants :\n- Rendre obligatoire le rapprochement hebdomadaire des factures émises avec les bons de livraison et le journal des ventes, avec formalisation du contrôle par une fiche de suivi signée par le Chef Comptable.\n- Mettre en place un contrôle de second niveau par le Responsable Administratif et Financier (RAF) pour vérifier la continuité de la séquence numérique des factures au moins une fois par mois.\n- Sécuriser l'archivage physique des liasses de facturation dans un lieu à accès restreint et renforcer la sauvegarde électronique des documents.\n- Lancer immédiatement une investigation interne pour identifier l'origine de la perte des factures et déterminer l'impact réel sur le recouvrement."
+                    }
+                    }
+                    ]
+                    }
+            ```
+            
+        - Exemple pour [Recos contrôle des comptes]
+            - 
+            
+            {
+            "Etape mission - Recos revision des comptes": [
+            {
+            "table 1": {
+            "Etape de mission": "Recommendations comptables",
+            "Norme": "Norme ISA",
+            "Méthode": "Méthode de la regulaeisations des comptes par les assertions",
+            "Reference": "Recos revision-001"
+            }
+            },
+            {
+            "table 2": {
+            "Intitule": "Dépenses de caisse non appuyées par des pièces justificatives probantes"
+            }
+            },
+            {
+            "table 3": {
+            "Description": "Nous avons mis en œuvre une procédure de rapprochement des pièces justificatives de caisse (référence feuille de travail : AA040), consistant à rapprocher exhaustivement chaque écriture enregistrée au journal de caisse avec sa pièce justificative correspondante (facture fournisseur, reçu signé, bon de caisse visé par un responsable habilité) pour l'ensemble des décaissements comptabilisés en charges fournisseurs au cours de l'exercice clos le 31.12.N.\\\\n\\\\n Cette procédure vise à s'assurer que chaque décaissement enregistré au crédit du compte 571 000 — Caisse est adossé à une pièce justificative probante, permettant d'établir la réalité, la nature et le bien-fondé de la charge correspondante, conformément aux exigences du SYSCOHADA Révisé et aux principes de régularité et de sincérité des états financiers.
+            ```
+            
+            ```
+            "
+            }
+            },
+            {
+            "table 4": {
+            "Observation": "Le rapprochement effectué entre les décaissements enregistrés au crédit du compte 571 000 — Caisse et les pièces justificatives collectées auprès de l'entité fait ressortir un écart de 600 000 FCFA au 31.12.N.\\nEn effet, des décaissements d'un montant cumulé de 600 000 FCFA, comptabilisés en charges fournisseurs au débit des comptes 601 XXX, ne sont appuyés d'aucune pièce justificative probante."
+            }
+            },
+            {
+            "table 5": {
+            "Ajustement/Reclassement": "- Nous proposons un ajustement pour sur-évaluation de charges d'un montant de 600 000 FCFA, correspondant à l'extourne des décaissements enregistrés en charges fournisseurs sans pièces justificatives probantes.\\nConformément au SYSCOHADA Révisé, une charge ne peut être reconnue dans les états financiers que si elle satisfait simultanément aux critères suivants. En l'absence de pièces justificatives, les charges concernées ne satisfont pas au critère de validité et ne peuvent être maintenues dans les états financiers."
+            }
+            },
+            {
+            "table 6": {
+            "Regularisation comptable": "
+            Nous proposons le débit du compte 571 000 — Caisse pour un montant de 600 000 FCFA TTC, par le crédit du compte 601 XXX — Charges fournisseurs pour le montant HT correspondant, et le crédit du compte 445 660 — TVA récupérable pour le montant de TVA afférent, au 31.12.N."
+            }
+            }
+            ]
+            }
+            ```
+            
+        - Exemple pour [Recos contrôle interne comptable]
+            - idem que Exemple pour [Frap]
+    - J
+- [Phase et etapes de mission]
+    - Phase de préparation
+        - Planification de la mission
+        - Lettre de mission
+        - 1 Rencontre avec la Direction de l’entité auditée
+        - 2 Compte rendu de la réunion
+        - 3 Réunion d’ouverture
+        - Collecte documentaire (prise de connaissance du Domaine audité )
+        - Plan d’approche – référentiel de contrôle interne
+        - Questionnaire de contrôle interne
+        - Tableau des forces et faiblesses apparentes
+        - Le rapport d’orientation
+        - Le programme de travail
+    - Phase de réalisation
+        - - La phase de terrain-test (feuille de couverture)
+    - Phase de conclusion
+        - LA FRAP 
+        - La synthèse des FRAP
+        - Le rapport provisoire
+        - La réunion de clôture
+        - Le rapport final
+- [Objectif]
+    - Le projet actuel n’est pas le projet source. Nous avons voulu developper nos workflow documentaires et mes integrer plus tard dans le projet source AIONUOI
+    - Les tables dans le ptrojet source sont enregistrees pour chaque utilisateurs selon la configuration des tables dans le dossier “Doc dev projet source”
+    - 1.notre objectif est d ajouter progressivement ce sous projet au projet source en commencant a deployer la meme base de donnees sqlite que le projet source avec les données de l admin
+    - 2.Pour les etapes de mission, nous souhaitons que les tables telles que modelisees dans le chat apparaissent sous leur forme de base a leur ouverture dans le menu contextuelle
+    - les document autres que les etapes de mission doit apparaissent avec l action ouvrir selon leur forme source. Nous avons 4 grands type de tables. Voir [Formatage data]
+- [Tache]
+    - 1.Pour les etapes de mission [Phase et etapes de mission] des workflow mission, l ouverture d’une etape de mission fait apparaitre a gauche sa nature de table liee, et a droite figure la treview qui a permis de l ouvrir
+    - 2.Fais une simulation avec des données pour workflow mission et l’exercice 2026 pour le dossier “audit trésorerie”

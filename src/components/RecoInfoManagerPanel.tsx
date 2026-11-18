@@ -921,27 +921,27 @@ export const RecoInfoManagerPanel: React.FC<RecoInfoManagerPanelProps> = ({
             </div>
 
             {sourceSubTab === 'ligne' ? (
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <div className="overflow-hidden rounded-lg border border-slate-300/90 bg-white shadow-[0_6px_18px_-3px_rgba(15,23,42,0.22),0_3px_8px_-2px_rgba(15,23,42,0.14)]">
                 <table className="w-full border-collapse text-left text-xs">
                   <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-semibold text-slate-600">
-                      <th className="w-12 px-3 py-2 font-mono">N°</th>
-                      <th className="w-48 px-3 py-2">Colonne source</th>
-                      <th className="px-3 py-2">Valeur enregistrée dans le fichier</th>
+                    <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
+                      <th className="w-12 px-3.5 py-2.5 font-mono">N°</th>
+                      <th className="w-48 px-3.5 py-2.5">Rubrique</th>
+                      <th className="px-3.5 py-2.5">Description</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-200 bg-white">
                     {SOURCE_COLUMNS.map((col, idx) => {
                       const val = String(record[col.key] ?? '');
                       return (
-                        <tr key={col.key} className="hover:bg-slate-50/70">
-                          <td className="px-3 py-2 font-mono text-[11px] text-slate-400 tabular-nums">
+                        <tr key={col.key} className="divide-x divide-slate-200 bg-white">
+                          <td className="px-3.5 py-2.5 font-mono text-[11px] text-slate-500 tabular-nums transition-colors hover:bg-[#EAF4FF]">
                             {idx + 1}
                           </td>
-                          <td className="px-3 py-2 font-medium text-slate-700 whitespace-nowrap">
+                          <td className="px-3.5 py-2.5 font-medium text-slate-700 whitespace-nowrap transition-colors hover:bg-[#EAF4FF]">
                             {col.header}
                           </td>
-                          <td className="px-3 py-2 text-slate-900 leading-relaxed">
+                          <td className="px-3.5 py-2.5 text-slate-900 leading-relaxed transition-colors hover:bg-[#EAF4FF] hover:ring-1 hover:ring-inset hover:ring-sky-500">
                             {val || '—'}
                           </td>
                         </tr>
@@ -985,16 +985,16 @@ export const RecoInfoManagerPanel: React.FC<RecoInfoManagerPanelProps> = ({
                   </div>
                 </div>
 
-                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-                  <table className="w-full border-collapse text-left text-[11px]">
+                <div className="overflow-x-auto rounded-lg border border-slate-300/90 bg-white shadow-[0_6px_18px_-3px_rgba(15,23,42,0.22),0_3px_8px_-2px_rgba(15,23,42,0.14)]">
+                  <table className="w-full border-collapse text-left text-xs">
                     <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold text-slate-700">
+                      <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
                         {SOURCE_COLUMNS.map((col, idx) => (
                           <th
                             key={col.key}
-                            className="border-r border-slate-200 px-2.5 py-2 whitespace-nowrap last:border-r-0"
+                            className="px-3 py-2.5 whitespace-nowrap"
                           >
-                            <span className="mr-1 font-mono text-[9px] text-slate-400">
+                            <span className="mr-1 font-mono text-[10px] text-white/75">
                               {idx + 1}.
                             </span>
                             {col.header}
@@ -1002,7 +1002,7 @@ export const RecoInfoManagerPanel: React.FC<RecoInfoManagerPanelProps> = ({
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-200 bg-white">
                       {sourceRows.length === 0 ? (
                         <tr>
                           <td
@@ -1026,11 +1026,11 @@ export const RecoInfoManagerPanel: React.FC<RecoInfoManagerPanelProps> = ({
                                 }
                                 setSourceSubTab('ligne');
                               }}
-                              className={`transition-colors ${
+                              className={`divide-x divide-slate-200 transition-colors ${
                                 item.nodeId && onSelectRecoNode
-                                  ? 'cursor-pointer hover:bg-blue-50/50'
+                                  ? 'cursor-pointer'
                                   : ''
-                              } ${isCurrent ? 'bg-blue-50/70' : 'bg-white'}`}
+                              } ${isCurrent ? 'bg-[#EAF4FF]' : 'bg-white'}`}
                             >
                               {SOURCE_COLUMNS.map((col) => {
                                 const val = String(r[col.key] ?? '');
@@ -1038,7 +1038,7 @@ export const RecoInfoManagerPanel: React.FC<RecoInfoManagerPanelProps> = ({
                                 return (
                                   <td
                                     key={col.key}
-                                    className={`border-r border-slate-100 px-2.5 py-2 align-top text-slate-800 last:border-r-0 ${
+                                    className={`px-3 py-2.5 align-top text-slate-800 transition-colors hover:bg-[#EAF4FF] hover:ring-1 hover:ring-inset hover:ring-sky-500 ${
                                       isLong ? 'min-w-[220px]' : 'whitespace-nowrap'
                                     }`}
                                   >

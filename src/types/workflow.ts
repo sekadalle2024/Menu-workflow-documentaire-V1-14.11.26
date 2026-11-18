@@ -144,6 +144,15 @@ export interface RecoSourceMetadata {
   intituleRecos: string;
 }
 
+export type MissionStepFormatType = 1 | 2 | 3 | 4;
+
+export type MissionPhaseName =
+  | 'Phase de préparation'
+  | 'Phase de réalisation'
+  | 'Phase de conclusion';
+
+export type SourceDocFormat = 'docx' | 'xlsx' | 'pdf' | 'csv';
+
 export interface WorkflowTreeNode {
   id: string;
   label: string;
@@ -167,6 +176,14 @@ export interface WorkflowTreeNode {
   recoMeta?: RecoSourceMetadata;
   planMissionMeta?: AuditPlanMissionMeta;
   planStepMeta?: AuditPlanStepMeta;
+  isMissionStep?: boolean;
+  missionStepFormatType?: MissionStepFormatType;
+  missionStepKey?: string;
+  missionPhase?: MissionPhaseName;
+  sourceDocFormat?: SourceDocFormat;
+  sqliteConversationId?: string;
+  sqliteMessageId?: string;
+  sqliteHasData?: boolean;
   children?: WorkflowTreeNode[];
 }
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PanelRightOpen, RefreshCw } from 'lucide-react';
+import { PanelRightOpen, RefreshCw, Share2 } from 'lucide-react';
 import { AuditChatWorkspace } from './components/AuditChatWorkspace';
 import { AuditPlanExecutionView } from './components/AuditPlanExecutionView';
 import { DeployScriptView } from './components/DeployScriptView';
@@ -7,7 +7,12 @@ import { DossierTreeAccordion } from './components/DossierTreeAccordion';
 import { LeftWorkflowSidebar } from './components/LeftWorkflowSidebar';
 import { PostgresDriveSchemaView } from './components/PostgresDriveSchemaView';
 import { RightSlidingMenu } from './components/RightSlidingMenu';
-import { SuiviRecosAnalyticsDashboard } from './components/SuiviRecosAnalyticsDashboard';
+import { ShareCollabModal } from './components/ShareCollabModal';
+import { SharedGuestWorkspace } from './components/SharedGuestWorkspace';
+import {
+  extractRecoAnalyticsRows,
+  SuiviRecosAnalyticsDashboard,
+} from './components/SuiviRecosAnalyticsDashboard';
 import { TopBar } from './components/TopBar';
 import { RecosDashboard } from './features/recos';
 import {
@@ -120,6 +125,41 @@ import {
   updatePlanMissionMetaInTree,
   updatePlanStepDatesInTree,
 } from './data/auditPlanWorkflowData';
+import {
+  buildFormatageDataForNode,
+  ParsedBaseTable,
+  resolveMissionStepClassification,
+} from './data/missionStepsFormatData';
+import {
+  appendMessageToSqliteChat,
+  getStepTablesFromSqlite,
+  loadEAuditSqliteDb,
+  tablesToMarkdown,
+  updateStepTablesInSqlite,
+} from './utils/eAuditSqliteStore';
+import {
+  SharedPhasesConfig,
+  SharedRecoRowSnapshot,
+  SharedWorkspaceRoom,
+} from './types/share';
+import {
+  createOrSyncShareRoom,
+  deterministicTokenForTarget,
+  fetchOwnerShareRooms,
+  fetchShareRoom,
+  patchShareRoom,
+  subscribeShareBroadcast,
+} from './utils/shareSyncClient';
+import {
+  collectSubtreeNodeIds,
+  EMPTY_SHARED_PHASES,
+  filterMissionTreeForStepAndPhases,
+  filterNodeByAllowedPhases,
+  findMissionContainerForStep,
+  getEnabledPhaseLabels,
+  mergeAuthorizedPhaseChangesIntoTrees,
+  subtreeContainsPhaseNodes,
+} from './utils/sharePhaseTree';
 
 interface HistorySnapshot {
   trees: WorkflowTreeNode[];
@@ -171,9 +211,14 @@ export default function App() {
         'user-2025-suivi-recos',
         'user-ex-2026',
         'user-2026-ex-audit',
+        'user-2026-ex-audit-tresorerie',
+        'user-2026-ex-audit-tres-prep',
+        'user-2026-ex-audit-tres-real',
+        'user-2026-ex-audit-tres-conc',
         'user-2026-plan-audit',
         'team-ex-2026',
         'team-2026-ex-audit',
+        'team-2026-ex-audit-tresorerie',
       ])
   );
   const [wfCheckedIds, setWfCheckedIds] = useState<Set<string>>(() => new Set());
@@ -200,9 +245,19 @@ export default function App() {
   const [undoStack, setUndoStack] = useState<HistorySnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<HistorySnapshot[]>([]);
 
+  // Collaboration sans compte (Partage par URL)
+  const [guestShareToken, setGuestShareToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return new URLSearchParams(window.location.search).get('share');
+  });
+  const [shareModalRoom, setShareModalRoom] = useState<SharedWorkspaceRoom | null>(null);
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [sqliteRefreshNonce, setSqliteRefreshNonce] = useState(0);
+
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
   const statusTimeoutRef = useRef<number | null>(null);
+  const appliedShareTimestampsRef = useRef<Record<string, number>>({});
 
   const flashStatus = useCallback((msg: string) => {
     setWfStatusMessage(msg);
@@ -1853,6 +1908,624 @@ export default function App() {
     []
   );
 
+  const handleSendMissionStepToChat = useCallback(
+    (stepNode: WorkflowTreeNode, tables: ParsedBaseTable[]) => {
+      if (isNodeLockedOrWithinLockedAncestor(workflowTrees, stepNode.id) || stepNode.locked) {
+        flashStatus('Envoi bloqué : étape verrouillée par code PIN.');
+        return;
+      }
+      const now = new Date();
+      const timestamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const fmtPayload = buildFormatageDataForNode(stepNode);
+
+      const userMsg: AuditChatMessage = {
+        id: `msg-u-step-${Date.now()}`,
+        role: 'user',
+        author: `${session.userSignature} · ${session.email}`,
+        timestamp,
+        content: `Ouvrir étape de mission : ${stepNode.label} (${fmtPayload.phase} · ${fmtPayload.formatLabel})`,
+      };
+
+      const tableMessages: AuditChatMessage[] = tables.map((tbl, idx) => ({
+        id: `msg-a-step-${Date.now()}-${idx}`,
+        role: 'assistant',
+        author: 'E-audit / Formatage data (SQLite v17)',
+        timestamp,
+        content:
+          idx === 0
+            ? `[Formatage data · Type ${fmtPayload.formatType}] ${stepNode.label} — ${tbl.title} (${fmtPayload.norme})`
+            : `${stepNode.label} — ${tbl.title} :`,
+        table: {
+          caption: `${stepNode.label} · ${tbl.title} (${fmtPayload.reference})`,
+          headers: tbl.headers,
+          rows: tbl.rows,
+        },
+      }));
+
+      setMessages((prev) => [...prev, userMsg, ...tableMessages]);
+      appendMessageToSqliteChat(
+        stepNode.sqliteConversationId || 'conv_tres_2026_mission',
+        'user_admin_oha',
+        `### ${stepNode.label} (${fmtPayload.formatLabel})`,
+        tables,
+        {
+          workflowId: stepNode.id,
+          executionId: `exec_${Date.now()}`,
+          stepKey: fmtPayload.stepKey,
+          formatType: fmtPayload.formatType,
+          reference: fmtPayload.reference,
+          nodeId: stepNode.id,
+        }
+      );
+
+      setActiveTab('workspace');
+      setIsRightMenuOpen(false);
+      flashStatus(
+        `Étape « ${stepNode.label} » (${tables.length} table(s)) intégrée dans le Chat et enregistrée dans SQLite v17.`
+      );
+    },
+    [workflowTrees, session.userSignature, session.email, flashStatus]
+  );
+
+  const ownerActorLabel = useMemo(
+    () => `Propriétaire (${session.userSignature})`,
+    [session.userSignature]
+  );
+
+  const collectStepTablesForSubtree = useCallback(
+    (rootNode: WorkflowTreeNode): Record<string, ParsedBaseTable[]> => {
+      const db = loadEAuditSqliteDb(session);
+      const map: Record<string, ParsedBaseTable[]> = {};
+      const walk = (n: WorkflowTreeNode) => {
+        if (n.nodeType === 'document' && resolveMissionStepClassification(n).isStep) {
+          map[n.id] = getStepTablesFromSqlite(db, n, session.client).tables;
+        }
+        n.children?.forEach(walk);
+      };
+      walk(rootNode);
+      return map;
+    },
+    [session]
+  );
+
+  const collectWordBodiesForSubtree = useCallback(
+    (rootNode: WorkflowTreeNode): Record<string, string> => {
+      const ids = collectSubtreeNodeIds(rootNode);
+      const map: Record<string, string> = {};
+      ids.forEach((id) => {
+        if (typeof wordBodies[id] === 'string') {
+          map[id] = wordBodies[id];
+        }
+      });
+      return map;
+    },
+    [wordBodies]
+  );
+
+  const buildRecoSnapshotList = useCallback(
+    (scopeRootId: 'root-workflow' | 'root-team-workflow' = 'root-workflow'): SharedRecoRowSnapshot[] => {
+      return extractRecoAnalyticsRows(workflowTrees, scopeRootId).map((r) => ({
+        nodeId: r.node.id,
+        label: r.node.label,
+        status: r.node.status || 'todo',
+        missionLabel: r.missionLabel,
+        exerciceLabel: r.exerciceLabel,
+        record: r.record,
+      }));
+    },
+    [workflowTrees]
+  );
+
+  const handleOpenShareForMissionStep = useCallback(
+    async (stepNode: WorkflowTreeNode, currentTables?: ParsedBaseTable[]) => {
+      const db = loadEAuditSqliteDb(session);
+      const tables =
+        currentTables && currentTables.length > 0
+          ? currentTables
+          : getStepTablesFromSqlite(db, stepNode, session.client).tables;
+      const token = deterministicTokenForTarget(
+        'mission-step',
+        session.userSignature,
+        stepNode.id
+      );
+
+      const existingRoom = await fetchShareRoom(token);
+      const missionContainer = findMissionContainerForStep(workflowTrees, stepNode.id);
+      const hasExistingValidation = Boolean(existingRoom?.phasesValidatedAt);
+      const includeWorkflow = hasExistingValidation
+        ? Boolean(existingRoom?.includeMissionWorkflow)
+        : existingRoom?.includeMissionWorkflow;
+      const initialAllowedPhases = hasExistingValidation
+        ? existingRoom?.allowedPhases ?? EMPTY_SHARED_PHASES
+        : existingRoom?.allowedPhases;
+
+      const filteredMissionTree =
+        includeWorkflow && missionContainer
+          ? filterMissionTreeForStepAndPhases(
+              missionContainer,
+              stepNode.id,
+              initialAllowedPhases
+            )
+          : undefined;
+
+      const tablesByNodeId: Record<string, ParsedBaseTable[]> = {
+        ...(filteredMissionTree
+          ? collectStepTablesForSubtree(filteredMissionTree)
+          : {}),
+        [stepNode.id]: tables,
+      };
+      const sharedWordBodies = filteredMissionTree
+        ? collectWordBodiesForSubtree(filteredMissionTree)
+        : undefined;
+
+      const stepSubtitle = missionContainer
+        ? `${stepNode.missionPhase || 'Étape de mission'} · ${missionContainer.label}`
+        : stepNode.missionPhase || 'Étape de mission';
+
+      const room = await createOrSyncShareRoom({
+        token,
+        active: existingRoom?.active ?? true,
+        allowEdit: existingRoom?.allowEdit ?? true,
+        shareType: 'mission-step',
+        title: stepNode.label,
+        subtitle: stepSubtitle,
+        ownerName: session.userSignature,
+        ownerEmail: session.email,
+        ownerSignature: session.userSignature,
+        clientName: session.client,
+        nodeId: stepNode.id,
+        node: stepNode,
+        includeMissionWorkflow: includeWorkflow,
+        missionRootNodeId: missionContainer?.id ?? existingRoom?.missionRootNodeId,
+        missionTree: filteredMissionTree,
+        allowedPhases: initialAllowedPhases,
+        phasesValidatedAt: existingRoom?.phasesValidatedAt,
+        wordBodies: sharedWordBodies,
+        tablesByNodeId,
+        recoUpdatesByNodeId: {},
+        lastModifiedBy: ownerActorLabel,
+      });
+      appliedShareTimestampsRef.current[room.token] = room.updatedAt;
+      setShareModalRoom(room);
+      setIsShareModalOpen(true);
+    },
+    [
+      session,
+      ownerActorLabel,
+      workflowTrees,
+      collectStepTablesForSubtree,
+      collectWordBodiesForSubtree,
+    ]
+  );
+
+  const handleOpenShareForSuiviRecos = useCallback(
+    async (scopeRootId: 'root-workflow' | 'root-team-workflow' = 'root-workflow') => {
+      const snapshot = buildRecoSnapshotList(scopeRootId);
+      const token = deterministicTokenForTarget(
+        'suivi-recos',
+        session.userSignature,
+        scopeRootId
+      );
+      const room = await createOrSyncShareRoom({
+        token,
+        active: true,
+        allowEdit: true,
+        shareType: 'suivi-recos',
+        title: 'Suivi des Recommandations',
+        subtitle:
+          scopeRootId === 'root-team-workflow'
+            ? 'Team Workflow · Auditeurs & Opérationnels'
+            : 'Workflow Personnel · Auditeurs & Opérationnels',
+        ownerName: session.userSignature,
+        ownerEmail: session.email,
+        ownerSignature: session.userSignature,
+        clientName: session.client,
+        nodeId: scopeRootId,
+        tablesByNodeId: {},
+        recoUpdatesByNodeId: {},
+        recoRowsSnapshot: snapshot,
+        lastModifiedBy: ownerActorLabel,
+      });
+      appliedShareTimestampsRef.current[room.token] = room.updatedAt;
+      setShareModalRoom(room);
+      setIsShareModalOpen(true);
+    },
+    [buildRecoSnapshotList, session, ownerActorLabel]
+  );
+
+  const handleOpenShareForWorkflowNode = useCallback(
+    async (targetNode: WorkflowTreeNode) => {
+      if (resolveMissionStepClassification(targetNode).isStep) {
+        await handleOpenShareForMissionStep(targetNode);
+        return;
+      }
+      if (targetNode.natureId === 'suivi-recos') {
+        const isTeam = targetNode.id.startsWith('team-');
+        await handleOpenShareForSuiviRecos(
+          isTeam ? 'root-team-workflow' : 'root-workflow'
+        );
+        return;
+      }
+
+      const token = deterministicTokenForTarget(
+        'workflow-dossier',
+        session.userSignature,
+        targetNode.id
+      );
+      const existingRoom = await fetchShareRoom(token);
+      const isPhased = subtreeContainsPhaseNodes(targetNode);
+      const initialAllowedPhases: SharedPhasesConfig | undefined =
+        existingRoom?.allowedPhases ?? (isPhased ? EMPTY_SHARED_PHASES : undefined);
+
+      const filteredNode = filterNodeByAllowedPhases(targetNode, initialAllowedPhases);
+      const tablesByNodeId = collectStepTablesForSubtree(filteredNode);
+      const sharedWordBodies = collectWordBodiesForSubtree(filteredNode);
+
+      const room = await createOrSyncShareRoom({
+        token,
+        active: existingRoom?.active ?? true,
+        allowEdit: existingRoom?.allowEdit ?? true,
+        shareType: 'workflow-dossier',
+        title: targetNode.label,
+        subtitle: 'Workflow collaboratif · Étapes, Phases & Collections',
+        ownerName: session.userSignature,
+        ownerEmail: session.email,
+        ownerSignature: session.userSignature,
+        clientName: session.client,
+        nodeId: targetNode.id,
+        node: filteredNode,
+        allowedPhases: initialAllowedPhases,
+        phasesValidatedAt: existingRoom?.phasesValidatedAt,
+        wordBodies: sharedWordBodies,
+        tablesByNodeId,
+        recoUpdatesByNodeId: {},
+        lastModifiedBy: ownerActorLabel,
+      });
+      appliedShareTimestampsRef.current[room.token] = room.updatedAt;
+      setShareModalRoom(room);
+      setIsShareModalOpen(true);
+    },
+    [
+      handleOpenShareForMissionStep,
+      handleOpenShareForSuiviRecos,
+      collectStepTablesForSubtree,
+      collectWordBodiesForSubtree,
+      session,
+      ownerActorLabel,
+    ]
+  );
+
+  const handleValidateSharePhases = useCallback(
+    async (
+      room: SharedWorkspaceRoom,
+      nextPhases: SharedPhasesConfig,
+      includeWorkflow: boolean
+    ): Promise<SharedWorkspaceRoom | null> => {
+      let sourceTrees = workflowTrees;
+
+      if (room.shareType === 'mission-step') {
+        if (room.missionTree && room.includeMissionWorkflow) {
+          const preMerge = mergeAuthorizedPhaseChangesIntoTrees(
+            workflowTrees,
+            room.missionTree,
+            room.allowedPhases,
+            room.nodeId
+          );
+          if (preMerge.changed) {
+            sourceTrees = preMerge.trees;
+            setWorkflowTrees(preMerge.trees);
+          }
+        }
+
+        const stepId = room.nodeId || room.node?.id || '';
+        const stepNode =
+          (stepId ? findNodeById(sourceTrees, stepId) : null) ?? room.node;
+        const missionNode =
+          (room.missionRootNodeId
+            ? findNodeById(sourceTrees, room.missionRootNodeId)
+            : null) ??
+          (stepId ? findMissionContainerForStep(sourceTrees, stepId) : null);
+
+        const enabledLabels = getEnabledPhaseLabels(nextPhases);
+
+        if (includeWorkflow && missionNode) {
+          const filteredMission = filterMissionTreeForStepAndPhases(
+            missionNode,
+            stepId,
+            nextPhases
+          );
+          const tablesByNodeId = collectStepTablesForSubtree(filteredMission);
+          if (stepNode && !tablesByNodeId[stepNode.id]) {
+            const db = loadEAuditSqliteDb(session);
+            tablesByNodeId[stepNode.id] = getStepTablesFromSqlite(
+              db,
+              stepNode,
+              session.client
+            ).tables;
+          }
+          const scopedWordBodies = collectWordBodiesForSubtree(filteredMission);
+
+          const updated = await patchShareRoom(room.token, {
+            includeMissionWorkflow: true,
+            missionRootNodeId: missionNode.id,
+            missionTree: filteredMission,
+            allowedPhases: nextPhases,
+            phasesValidatedAt: Date.now(),
+            tablesByNodeId,
+            wordBodies: scopedWordBodies,
+            isOwnerUpdate: true,
+            actor: ownerActorLabel,
+            changeSummary:
+              enabledLabels.length > 0
+                ? `Accès workflow lié & phases validées : ${enabledLabels.join(', ')}`
+                : 'Workflow lié activé pour l’étape (aucune phase supplémentaire cochée)',
+          });
+          if (updated) {
+            appliedShareTimestampsRef.current[updated.token] = updated.updatedAt;
+            setShareModalRoom(updated);
+            flashStatus(
+              enabledLabels.length > 0
+                ? `Workflow lié & phases validées : ${enabledLabels.join(' · ')}`
+                : "Workflow lié activé pour l'étape partagée."
+            );
+          }
+          return updated;
+        }
+
+        const updated = await patchShareRoom(room.token, {
+          includeMissionWorkflow: false,
+          missionTree: null,
+          allowedPhases: EMPTY_SHARED_PHASES,
+          phasesValidatedAt: Date.now(),
+          isOwnerUpdate: true,
+          actor: ownerActorLabel,
+          changeSummary:
+            'Accès au workflow lié désactivé (tables de l’étape uniquement)',
+        });
+        if (updated) {
+          appliedShareTimestampsRef.current[updated.token] = updated.updatedAt;
+          setShareModalRoom(updated);
+          flashStatus('Accès restreint aux tables de l’étape uniquement.');
+        }
+        return updated;
+      }
+
+      if (room.node && room.allowedPhases) {
+        const preMerge = mergeAuthorizedPhaseChangesIntoTrees(
+          workflowTrees,
+          room.node,
+          room.allowedPhases
+        );
+        if (preMerge.changed) {
+          sourceTrees = preMerge.trees;
+          setWorkflowTrees(preMerge.trees);
+        }
+      }
+
+      const targetNode =
+        (room.nodeId ? findNodeById(sourceTrees, room.nodeId) : null) ?? room.node;
+      if (!targetNode) return null;
+
+      const filteredNode = filterNodeByAllowedPhases(targetNode, nextPhases);
+      const tablesByNodeId = collectStepTablesForSubtree(filteredNode);
+      const scopedWordBodies = collectWordBodiesForSubtree(filteredNode);
+      const enabledLabels = getEnabledPhaseLabels(nextPhases);
+
+      const updated = await patchShareRoom(room.token, {
+        allowedPhases: nextPhases,
+        phasesValidatedAt: Date.now(),
+        node: filteredNode,
+        tablesByNodeId,
+        wordBodies: scopedWordBodies,
+        isOwnerUpdate: true,
+        actor: ownerActorLabel,
+        changeSummary:
+          enabledLabels.length > 0
+            ? `Phases validées par le propriétaire : ${enabledLabels.join(', ')}`
+            : 'Accès aux phases suspendu par le propriétaire',
+      });
+      if (updated) {
+        appliedShareTimestampsRef.current[updated.token] = updated.updatedAt;
+        setShareModalRoom(updated);
+        flashStatus(
+          enabledLabels.length > 0
+            ? `Phases validées pour le partage : ${enabledLabels.join(' · ')}`
+            : 'Aucune phase validée pour les invités.'
+        );
+      }
+      return updated;
+    },
+    [
+      workflowTrees,
+      session,
+      collectStepTablesForSubtree,
+      collectWordBodiesForSubtree,
+      ownerActorLabel,
+      flashStatus,
+    ]
+  );
+
+  const integrateGuestRoomChanges = useCallback(
+    (room: SharedWorkspaceRoom) => {
+      setShareModalRoom((prev) =>
+        prev && prev.token === room.token && room.updatedAt > prev.updatedAt
+          ? room
+          : prev
+      );
+
+      const lastApplied = appliedShareTimestampsRef.current[room.token] ?? 0;
+      if (room.updatedAt <= lastApplied) return;
+      appliedShareTimestampsRef.current[room.token] = room.updatedAt;
+
+      if (room.lastModifiedBy === ownerActorLabel) return;
+
+      let tablesIntegratedCount = 0;
+      const db = loadEAuditSqliteDb(session);
+
+      Object.entries(room.tablesByNodeId || {}).forEach(([stepNodeId, nextTables]) => {
+        if (!Array.isArray(nextTables) || nextTables.length === 0) return;
+        const stepNode =
+          findNodeById(workflowTrees, stepNodeId) ??
+          (room.node ? findNodeById([room.node], stepNodeId) : undefined) ??
+          (room.missionTree ? findNodeById([room.missionTree], stepNodeId) : undefined);
+        if (!stepNode) return;
+
+        const current = getStepTablesFromSqlite(db, stepNode, session.client).tables;
+        if (tablesToMarkdown(current) !== tablesToMarkdown(nextTables)) {
+          updateStepTablesInSqlite(
+            stepNode,
+            nextTables,
+            'collab_guest',
+            `Édition collaborative (${room.lastModifiedBy || 'Invité'})`,
+            session.client
+          );
+          tablesIntegratedCount += 1;
+        }
+      });
+
+      if (tablesIntegratedCount > 0) {
+        setSqliteRefreshNonce((n) => n + 1);
+      }
+
+      let treePhasesUpdatedCount = 0;
+      let wordBodiesIntegratedCount = 0;
+      let workingTrees = workflowTrees;
+      const newlyAddedToExpand: string[] = [];
+
+      const guestTreeToMerge =
+        room.shareType === 'workflow-dossier'
+          ? room.node
+          : room.shareType === 'mission-step' && room.includeMissionWorkflow
+          ? room.missionTree
+          : undefined;
+
+      if (guestTreeToMerge) {
+        const treeMerge = mergeAuthorizedPhaseChangesIntoTrees(
+          workingTrees,
+          guestTreeToMerge,
+          room.allowedPhases,
+          room.shareType === 'mission-step' ? room.nodeId : undefined
+        );
+        if (treeMerge.changed) {
+          workingTrees = treeMerge.trees;
+          treePhasesUpdatedCount = treeMerge.updatedPhaseLabels.length;
+          newlyAddedToExpand.push(...treeMerge.newlyAddedNodeIds);
+        }
+
+        const wordBodiesPatch: Record<string, string> = {};
+        Object.entries(room.wordBodies || {}).forEach(([docId, content]) => {
+          if (
+            treeMerge.authorizedDocIds.has(docId) &&
+            typeof content === 'string' &&
+            wordBodies[docId] !== content
+          ) {
+            wordBodiesPatch[docId] = content;
+          }
+        });
+        wordBodiesIntegratedCount = Object.keys(wordBodiesPatch).length;
+        if (wordBodiesIntegratedCount > 0) {
+          setWordBodies((prev) => ({ ...prev, ...wordBodiesPatch }));
+        }
+      }
+
+      const recoEntries = Object.entries(room.recoUpdatesByNodeId || {});
+      let recosIntegratedCount = 0;
+      if (recoEntries.length > 0 || treePhasesUpdatedCount > 0) {
+        let nextTrees = workingTrees;
+        recoEntries.forEach(([recoNodeId, patch]) => {
+          if (!patch) return;
+          if (patch.recoMeta && Object.keys(patch.recoMeta).length > 0) {
+            nextTrees = updateRecoMetaInTree(
+              nextTrees,
+              recoNodeId,
+              patch.recoMeta,
+              room.lastModifiedBy || 'EXT'
+            );
+            recosIntegratedCount += 1;
+          }
+          if (patch.status) {
+            nextTrees = setNodesStatusInTree(
+              nextTrees,
+              new Set([recoNodeId]),
+              patch.status,
+              room.lastModifiedBy || 'EXT'
+            );
+          }
+        });
+        setWorkflowTrees(nextTrees);
+        if (newlyAddedToExpand.length > 0) {
+          setWfExpandedIds((prev) => {
+            const next = new Set(prev);
+            newlyAddedToExpand.forEach((addedId) => {
+              const path = findNodePath(nextTrees, addedId);
+              path?.forEach((p) => next.add(p.id));
+            });
+            return next;
+          });
+        }
+      }
+
+      if (
+        tablesIntegratedCount > 0 ||
+        recosIntegratedCount > 0 ||
+        treePhasesUpdatedCount > 0 ||
+        wordBodiesIntegratedCount > 0
+      ) {
+        const parts: string[] = [];
+        if (tablesIntegratedCount > 0) parts.push(`${tablesIntegratedCount} table(s) SQLite`);
+        if (treePhasesUpdatedCount > 0) parts.push(`${treePhasesUpdatedCount} phase(s) TreeView`);
+        if (wordBodiesIntegratedCount > 0) parts.push(`${wordBodiesIntegratedCount} pièce(s)`);
+        if (recosIntegratedCount > 0) parts.push(`${recosIntegratedCount} reco(s)`);
+        flashStatus(
+          `Collaboration intégrée (${room.lastModifiedBy || 'Invité'}) : ${parts.join(', ')} mise(s) à jour.`
+        );
+      }
+    },
+    [ownerActorLabel, session, workflowTrees, wordBodies, flashStatus]
+  );
+
+  useEffect(() => {
+    if (guestShareToken) return;
+
+    const syncAll = async () => {
+      const rooms = await fetchOwnerShareRooms(session.email);
+      rooms.forEach((r) => integrateGuestRoomChanges(r));
+    };
+
+    void syncAll();
+    const unsub = subscribeShareBroadcast((room) => {
+      if (room.ownerEmail.toLowerCase() === session.email.toLowerCase()) {
+        integrateGuestRoomChanges(room);
+      }
+    });
+    const timer = window.setInterval(() => {
+      void syncAll();
+    }, 2500);
+    window.addEventListener('focus', syncAll);
+
+    return () => {
+      unsub();
+      window.clearInterval(timer);
+      window.removeEventListener('focus', syncAll);
+    };
+  }, [guestShareToken, session.email, integrateGuestRoomChanges]);
+
+  if (guestShareToken) {
+    return (
+      <SharedGuestWorkspace
+        token={guestShareToken}
+        onExitGuestMode={() => {
+          setGuestShareToken(null);
+          if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('share');
+            window.history.replaceState({}, '', url.toString());
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <TopBar
@@ -1903,6 +2576,21 @@ export default function App() {
               >
                 <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                 <span>Analyser DOM</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetNode =
+                    findNodeById(workflowTrees, 'user-2026-ex-audit') ?? workflowTrees[0];
+                  if (targetNode) {
+                    void handleOpenShareForWorkflowNode(targetNode);
+                  }
+                }}
+                title="Générer une URL de partage collaborative (équipe / opérationnels sans compte)"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-600 bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Share2 className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Partager</span>
               </button>
               <button
                 type="button"
@@ -2028,6 +2716,7 @@ export default function App() {
                 onToggleReviewNote={handleToggleReviewNote}
                 onDeleteReviewNote={handleDeleteReviewNote}
                 onUpdateRecoMeta={handleUpdateRecoMeta}
+                onShareSuiviRecos={(scopeId) => void handleOpenShareForSuiviRecos(scopeId)}
                 onOpenWordDoc={(docNode) => {
                   handleJumpToNode(docNode.id);
                   handleOpenWordDoc(docNode);
@@ -2127,6 +2816,38 @@ export default function App() {
         onMergeCollections={handleMergeCollections}
         onAddExistingToCollection={handleAddExistingToCollection}
         onOpenDocumentInChat={handleOpenDocumentInChat}
+        onSendMissionStepToChat={handleSendMissionStepToChat}
+        sqliteRefreshNonce={sqliteRefreshNonce}
+        onShareNode={(node) => void handleOpenShareForWorkflowNode(node)}
+        onShareMissionStep={(node, tables) =>
+          void handleOpenShareForMissionStep(node, tables)
+        }
+        onSqliteSynced={(detail, stepNode, nextTables) => {
+          flashStatus(detail);
+          if (stepNode && nextTables) {
+            void fetchOwnerShareRooms(session.email).then((rooms) => {
+              rooms.forEach((r) => {
+                if (
+                  r.active &&
+                  (r.nodeId === stepNode.id ||
+                    Boolean(r.tablesByNodeId?.[stepNode.id]))
+                ) {
+                  void patchShareRoom(r.token, {
+                    tablesByNodeId: { [stepNode.id]: nextTables },
+                    isOwnerUpdate: true,
+                    actor: ownerActorLabel,
+                    changeSummary: `Mise à jour propriétaire : ${stepNode.label}`,
+                  }).then((updated) => {
+                    if (updated) {
+                      appliedShareTimestampsRef.current[updated.token] =
+                        updated.updatedAt;
+                    }
+                  });
+                }
+              });
+            });
+          }
+        }}
         onDownloadNodes={handleDownloadNodes}
         onExportArchive={handleExportArchive}
         onImportFilesToNode={handleImportFilesToNode}
@@ -2178,6 +2899,18 @@ export default function App() {
           setActiveTab('suivi-recos-analytics');
           setIsRightMenuOpen(false);
         }}
+      />
+
+      <ShareCollabModal
+        room={shareModalRoom}
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        onUpdateRoom={(nextRoom) => {
+          appliedShareTimestampsRef.current[nextRoom.token] = nextRoom.updatedAt;
+          setShareModalRoom(nextRoom);
+        }}
+        onValidatePhases={handleValidateSharePhases}
+        onPreviewGuest={(token) => setGuestShareToken(token)}
       />
     </div>
   );

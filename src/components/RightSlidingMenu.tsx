@@ -37,6 +37,7 @@ import {
   Link2,
   ListTodo,
   Lock,
+  Menu,
   MessageSquarePlus,
   MessageSquareWarning,
   MoreVertical,
@@ -46,6 +47,7 @@ import {
   Plus,
   Redo2,
   Search,
+  Share2,
   ShieldAlert,
   Table2,
   Trash2,
@@ -109,6 +111,12 @@ import {
   ExportActivityType,
   ExportFormatKind,
 } from '../utils/etatExportEngine';
+import { MissionStepTableViewer } from './MissionStepTableViewer';
+import {
+  buildFormatageDataForNode,
+  ParsedBaseTable,
+  resolveMissionStepClassification,
+} from '../data/missionStepsFormatData';
 
 interface TriCheckboxProps {
   state: 'checked' | 'unchecked' | 'indeterminate';
@@ -262,6 +270,15 @@ interface RightSlidingMenuProps {
   ) => void;
   onOpenAuditPlanTab: () => void;
   onOpenSuiviRecosAnalyticsTab?: () => void;
+  onSendMissionStepToChat?: (node: WorkflowTreeNode, tables: ParsedBaseTable[]) => void;
+  onSqliteSynced?: (
+    detail: string,
+    node?: WorkflowTreeNode,
+    nextTables?: ParsedBaseTable[]
+  ) => void;
+  onShareNode?: (node: WorkflowTreeNode) => void;
+  onShareMissionStep?: (node: WorkflowTreeNode, tables: ParsedBaseTable[]) => void;
+  sqliteRefreshNonce?: number;
 }
 
 function nodeMatchesSearch(node: WorkflowTreeNode, query: string): boolean {
@@ -363,6 +380,11 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   onUpdateRecoMeta,
   onOpenAuditPlanTab,
   onOpenSuiviRecosAnalyticsTab,
+  onSendMissionStepToChat,
+  onSqliteSynced,
+  onShareNode,
+  onShareMissionStep,
+  sqliteRefreshNonce = 0,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showApiPanel, setShowApiPanel] = useState(false);
@@ -443,6 +465,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     scopeNodeId?: string;
     nonce: number;
   } | null>(null);
+  const [openedMissionStepNode, setOpenedMissionStepNode] = useState<WorkflowTreeNode | null>(null);
+  const [showStepHeaderSubmenu, setShowStepHeaderSubmenu] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const importDirInputRef = useRef<HTMLInputElement | null>(null);
@@ -463,14 +487,42 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     [openedRecoInfoNode]
   );
 
+  const isMissionStepTopMode = Boolean(
+    openedMissionStepNode &&
+      !openedWordDoc &&
+      !integratedDataDoc &&
+      !integratedCollectionDoc &&
+      !(openedRecoInfoNode && openedRecoInfoRecord) &&
+      !openedAuditPlanState &&
+      !openedExportEtat
+  );
+
   useEffect(() => {
     if (openedWordDoc || integratedDataDoc || integratedCollectionDoc) {
       setOpenedRecoInfoId(null);
       setOpenedRecoScopeId(undefined);
       setOpenedAuditPlanState(null);
       setOpenedExportEtat(null);
+      setOpenedMissionStepNode(null);
+      setShowStepHeaderSubmenu(false);
     }
   }, [openedWordDoc, integratedDataDoc, integratedCollectionDoc]);
+
+  const openMissionStepPanel = (targetNode: WorkflowTreeNode) => {
+    if (isNodeLockedOrWithinLockedAncestor(trees, targetNode.id) || targetNode.locked) {
+      return;
+    }
+    if (openedWordDoc) onCloseWordDoc();
+    if (integratedDataDoc) onCloseIntegratedData();
+    if (integratedCollectionDoc) onCloseIntegratedCollection();
+    setOpenedRecoInfoId(null);
+    setOpenedRecoScopeId(undefined);
+    setOpenedAuditPlanState(null);
+    setOpenedExportEtat(null);
+    setOpenedMissionStepNode(targetNode);
+    setShowStepHeaderSubmenu(false);
+    onJumpToNode(targetNode.id);
+  };
 
   const openExportEtatPanel = (
     activity: ExportActivityType,
@@ -483,6 +535,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     setOpenedRecoInfoId(null);
     setOpenedRecoScopeId(undefined);
     setOpenedAuditPlanState(null);
+    setOpenedMissionStepNode(null);
     const resolvedScopeId =
       !targetNode
         ? undefined
@@ -513,6 +566,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     if (integratedCollectionDoc) onCloseIntegratedCollection();
     setOpenedAuditPlanState(null);
     setOpenedExportEtat(null);
+    setOpenedMissionStepNode(null);
 
     const directReco =
       targetNode.recoMeta ??
@@ -551,6 +605,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     if (integratedCollectionDoc) onCloseIntegratedCollection();
     setOpenedRecoInfoId(null);
     setOpenedExportEtat(null);
+    setOpenedMissionStepNode(null);
 
     const path = targetNode ? findNodePath(trees, targetNode.id) || [] : [];
     const missionNode =
@@ -959,7 +1014,14 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                     node.natureId === 'suivi-recos' &&
                     Boolean(findRecoRecordByRefOrLabel(node.label)));
                 if (node.nodeType === 'document') {
-                  if (!effectivelyLocked) onOpenWordDoc(node);
+                  if (!effectivelyLocked) {
+                    const stepCls = resolveMissionStepClassification(node);
+                    if (stepCls.isStep) {
+                      openMissionStepPanel(node);
+                    } else {
+                      onOpenWordDoc(node);
+                    }
+                  }
                 } else if (node.natureId === 'plan-audit' && Boolean(node.planMissionMeta)) {
                   const isAlreadyActiveMission =
                     openedAuditPlanState?.mode === 'integrale' &&
@@ -1300,12 +1362,14 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
           integratedCollectionDoc ||
           (openedRecoInfoNode && openedRecoInfoRecord) ||
           openedAuditPlanState ||
-          openedExportEtat
-            ? 'max-w-[1360px]'
+          openedExportEtat ||
+          openedMissionStepNode
+            ? 'max-w-[1440px]'
             : 'max-w-[780px]'
         } ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
       >
-        {/* Header identité & accès API — INCHANGÉ */}
+        {/* Header identité & accès API — masqué quand une étape de mission occupe toute la partie haute */}
+        {!isMissionStepTopMode && (
         <div className="flex items-center justify-between gap-4 border-b border-slate-800 px-5 py-3.5">
           <div className="min-w-0">
             <h2 className="font-display truncate text-base font-semibold text-white">
@@ -1318,6 +1382,31 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {(onShareNode || onShareMissionStep) && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (openedMissionStepNode && onShareNode) {
+                    onShareNode(openedMissionStepNode);
+                    return;
+                  }
+                  const checkedFirst =
+                    checkedNonRootNodes[0] ??
+                    (highlightedNodeId ? findNodeById(trees, highlightedNodeId) : null) ??
+                    findNodeById(trees, 'user-2026-ex-audit') ??
+                    visibleRoots[0];
+                  if (checkedFirst && onShareNode) {
+                    onShareNode(checkedFirst);
+                  }
+                }}
+                title="Générer une URL de partage collaborative sans compte"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-600/80 bg-emerald-600/20 px-2.5 py-1.5 text-xs font-semibold text-emerald-200 transition-colors hover:bg-emerald-600 hover:text-white whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Share2 className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Partager</span>
+              </button>
+            )}
+
             {onOpenSuiviRecosAnalyticsTab && (
               <button
                 type="button"
@@ -1374,8 +1463,9 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             </button>
           </div>
         </div>
+        )}
 
-        {/* Panneau PostgreSQL / User Api Key & Team Api Key — INCHANGÉ */}
+        {/* Panneau PostgreSQL / User Api Key & Team Api Key */}
         {showApiPanel && (
           <form
             onSubmit={handleValidateKeys}
@@ -1447,39 +1537,53 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
         )}
 
         {/* Recherche, Contrôles TreeView & Saisie contextuelle */}
+        {(!isMissionStepTopMode ||
+          activatedSourceIds.length > 0 ||
+          moveSourceIds.length > 0 ||
+          clipboardIds.length > 0 ||
+          Boolean(pinPrompt) ||
+          Boolean(addingTarget) ||
+          Boolean(mergeCollectionPrompt) ||
+          Boolean(collectionPickerPrompt) ||
+          Boolean(addToCollectionPrompt) ||
+          Boolean(statusMessage)) && (
         <div className="space-y-2.5 border-b border-slate-800 px-5 py-3">
-          <div className="relative">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
-              aria-hidden="true"
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Rechercher un workflow, exercice, signature [SEK] ou document..."
-              className="w-full rounded-lg border border-slate-700 bg-slate-800/90 py-1.5 pr-8 pl-9 text-xs text-slate-100 placeholder:text-slate-400 focus:outline-2 focus:outline-blue-500"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute top-1/2 right-2.5 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+          {!isMissionStepTopMode && (
+            <>
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400"
+                  aria-hidden="true"
+                />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Rechercher un workflow, exercice, signature [SEK] ou document..."
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800/90 py-1.5 pr-8 pl-9 text-xs text-slate-100 placeholder:text-slate-400 focus:outline-2 focus:outline-blue-500"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute top-1/2 right-2.5 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-            <span className="font-mono tabular-nums">
-              {checkedNodes.length} coché{checkedNodes.length > 1 ? 's' : ''}
-            </span>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+                <span className="font-mono tabular-nums">
+                  {checkedNodes.length} coché{checkedNodes.length > 1 ? 's' : ''}
+                </span>
 
-            <span className="text-[11px] text-slate-400">
-              Clic droit ou glisser-déposer pour actions
-            </span>
-          </div>
+                <span className="text-[11px] text-slate-400">
+                  Clic droit ou glisser-déposer pour actions
+                </span>
+              </div>
+            </>
+          )}
 
           {activatedSourceIds.length > 0 && (
             <div className="flex items-center justify-between gap-2 rounded-md border border-emerald-800/70 bg-emerald-950/50 px-3 py-1.5 text-xs text-emerald-200">
@@ -1989,6 +2093,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             </div>
           )}
         </div>
+        )}
 
         {/* Tableau de bord & Gantt d'audit (apparaît au-dessus du contenu si activé) */}
         {showStatsDashboard && (
@@ -2010,107 +2115,218 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
 
         {/* Zone principale : Document Word / Data (large fenêtre) + Arborescence */}
         <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          {/* Simulation d'un document Word vierge ouvert AU-DESSUS (mobile) / GRANDE FENÊTRE (desktop) */}
-          {openedWordDoc && (
-            <div
-              aria-label={`Document Word simulé : ${openedWordDoc.label}`}
-              className="flex min-h-0 flex-1 flex-col border-b border-slate-700 bg-slate-950 p-3 lg:border-b-0 lg:border-r lg:border-slate-800 lg:p-4"
-            >
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-700 bg-white text-slate-900 shadow-lg">
-                <div className="flex shrink-0 items-center justify-between gap-2 bg-[#185ABD] px-3.5 py-2 text-xs text-white">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white/15 font-serif text-[11px] font-bold">
-                      W
-                    </span>
-                    <span className="truncate font-medium" title={`${openedWordDoc.label}.docx`}>
-                      {openedWordDoc.label}.docx
-                    </span>
-                    {openedWordDoc.locked && (
-                      <Lock className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-label="Verrouillé" />
-                    )}
-                    {openedWordDoc.managerReviewed && (
-                      <ClipboardCheck
-                        className="h-3.5 w-3.5 shrink-0 text-emerald-300"
-                        aria-label="Revue manager"
-                      />
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {!openedWordDoc.locked && (
+          {/* Simulation d'un document source ouvert à gauche (Word / Excel / PDF · Type 4) */}
+          {openedWordDoc && (() => {
+            const lowerName = openedWordDoc.label.toLowerCase();
+            const inferredExt: 'xlsx' | 'pdf' | 'docx' =
+              openedWordDoc.sourceDocFormat === 'xlsx' || lowerName.endsWith('.xlsx')
+                ? 'xlsx'
+                : openedWordDoc.sourceDocFormat === 'pdf' || lowerName.endsWith('.pdf')
+                ? 'pdf'
+                : 'docx';
+            const headerBg =
+              inferredExt === 'xlsx'
+                ? 'bg-[#217346]'
+                : inferredExt === 'pdf'
+                ? 'bg-[#B91C1C]'
+                : 'bg-[#185ABD]';
+            const badgeText =
+              inferredExt === 'xlsx' ? 'XLSX' : inferredExt === 'pdf' ? 'PDF' : 'W';
+            const displayFileName =
+              lowerName.endsWith(`.${inferredExt}`)
+                ? openedWordDoc.label
+                : `${openedWordDoc.label}.${inferredExt}`;
+            const sourcePayload =
+              openedWordDoc.missionStepFormatType === 4 || inferredExt !== 'docx'
+                ? buildFormatageDataForNode(openedWordDoc)
+                : null;
+            const currentBody =
+              wordBodies[openedWordDoc.id] ??
+              (sourcePayload?.sourceSummary || '');
+
+            return (
+              <div
+                aria-label={`Document source ouvert : ${openedWordDoc.label}`}
+                className="flex min-h-0 flex-1 flex-col border-b border-slate-700 bg-slate-950 p-3 lg:border-b-0 lg:border-r lg:border-slate-800 lg:p-4"
+              >
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-700 bg-white text-slate-900 shadow-lg">
+                  <div className={`flex shrink-0 items-center justify-between gap-2 ${headerBg} px-3.5 py-2 text-xs text-white`}>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="inline-flex h-5 min-w-[22px] shrink-0 items-center justify-center rounded bg-white/15 px-1 font-mono text-[10px] font-bold">
+                        {badgeText}
+                      </span>
+                      <span className="truncate font-medium" title={displayFileName}>
+                        {displayFileName}
+                      </span>
+                      <span className="hidden rounded bg-white/15 px-1.5 py-0.5 text-[10px] font-medium sm:inline">
+                        Forme source · .{inferredExt}
+                      </span>
+                      {openedWordDoc.locked && (
+                        <Lock className="h-3.5 w-3.5 shrink-0 text-amber-300" aria-label="Verrouillé" />
+                      )}
+                      {openedWordDoc.managerReviewed && (
+                        <ClipboardCheck
+                          className="h-3.5 w-3.5 shrink-0 text-emerald-300"
+                          aria-label="Revue manager"
+                        />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {!openedWordDoc.locked && (
+                        <button
+                          type="button"
+                          onClick={() => onSaveVersion(openedWordDoc.id, `Sauvegarde depuis ${inferredExt.toUpperCase()}`)}
+                          className="rounded bg-white/15 px-2.5 py-0.5 text-[11px] font-medium hover:bg-white/25 cursor-pointer"
+                        >
+                          Enregistrer version
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => onSaveVersion(openedWordDoc.id, 'Sauvegarde depuis Word')}
+                        onClick={() => onOpenDocumentInChat(openedWordDoc)}
                         className="rounded bg-white/15 px-2.5 py-0.5 text-[11px] font-medium hover:bg-white/25 cursor-pointer"
                       >
-                        Enregistrer version
+                        Envoyer au chat
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => onOpenDocumentInChat(openedWordDoc)}
-                      className="rounded bg-white/15 px-2.5 py-0.5 text-[11px] font-medium hover:bg-white/25 cursor-pointer"
-                    >
-                      Envoyer au chat
-                    </button>
-                    <button
-                      type="button"
-                      onClick={onCloseWordDoc}
-                      aria-label="Fermer le document Word simulé"
-                      className="rounded p-0.5 hover:bg-white/20 cursor-pointer"
-                    >
-                      <X className="h-3.5 w-3.5" aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-100 px-3.5 py-1.5 text-[11px] text-slate-600">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded border border-slate-300 bg-white px-1.5 py-0.5 font-sans">
-                      Calibri · 11
-                    </span>
-                    <span className="font-bold">G</span>
-                    <span className="italic">I</span>
-                    <span className="underline">S</span>
-                    <span className="ml-2 hidden text-[10px] text-slate-500 sm:inline">
-                      Mise en page · A4 Portrait (100 %)
-                    </span>
-                  </div>
-                  <span className="font-mono text-[10px] text-slate-500">
-                    {openedWordDoc.locked
-                      ? 'Lecture seule (verrouillé par PIN)'
-                      : `Document vierge · [${openedWordDoc.owner || session.userSignature}]`}
-                  </span>
-                </div>
-
-                <div className="max-h-[55vh] flex-1 overflow-y-auto bg-slate-200/85 p-4 lg:max-h-none lg:p-6">
-                  <div className="mx-auto flex min-h-[480px] max-w-[794px] flex-col rounded border border-slate-300 bg-white px-8 py-7 shadow-md lg:min-h-full lg:px-12 lg:py-10">
-                    <div className="border-b border-slate-200 pb-3">
-                      <div className="text-base font-bold text-slate-900">
-                        {openedWordDoc.label}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        Réf. Drive : {openedWordDoc.driveId || 'N/A'} · Client : {session.client}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={onCloseWordDoc}
+                        aria-label="Fermer le document source"
+                        className="rounded p-0.5 hover:bg-white/20 cursor-pointer"
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
                     </div>
-                    <textarea
-                      rows={18}
-                      readOnly={Boolean(openedWordDoc.locked)}
-                      value={wordBodies[openedWordDoc.id] ?? ''}
-                      onChange={(e) => onUpdateWordBody(openedWordDoc.id, e.target.value)}
-                      placeholder={
-                        openedWordDoc.locked
-                          ? 'Document verrouillé — déverrouillez avec le code PIN pour modifier.'
-                          : "Document vierge simulé — saisissez vos observations, constats ou tests d'audit..."
-                      }
-                      className={`mt-5 min-h-[380px] w-full flex-1 resize-none border-0 bg-transparent text-sm leading-relaxed placeholder:text-slate-400 focus:outline-none ${
-                        openedWordDoc.locked ? 'cursor-not-allowed text-slate-500' : 'text-slate-800'
-                      }`}
-                    />
+                  </div>
+
+                  <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-100 px-3.5 py-1.5 text-[11px] text-slate-600">
+                    <div className="flex items-center gap-2">
+                      {inferredExt === 'xlsx' ? (
+                        <>
+                          <span className="rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-emerald-800">
+                            Feuille Excel · SYSCOHADA
+                          </span>
+                          <span className="hidden text-[10px] text-slate-500 sm:inline">
+                            Pièce justificative native (Type 4)
+                          </span>
+                        </>
+                      ) : inferredExt === 'pdf' ? (
+                        <>
+                          <span className="rounded border border-red-300 bg-red-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-red-800">
+                            Document PDF · Signé
+                          </span>
+                          <span className="hidden text-[10px] text-slate-500 sm:inline">
+                            Pièce justificative probante (Type 4)
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="rounded border border-slate-300 bg-white px-1.5 py-0.5 font-sans">
+                            Calibri · 11
+                          </span>
+                          <span className="font-bold">G</span>
+                          <span className="italic">I</span>
+                          <span className="underline">S</span>
+                          <span className="ml-2 hidden text-[10px] text-slate-500 sm:inline">
+                            Mise en page · A4 Portrait (100 %)
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    <span className="font-mono text-[10px] text-slate-500">
+                      {openedWordDoc.locked
+                        ? 'Lecture seule (verrouillé par PIN)'
+                        : `Forme source · [${openedWordDoc.owner || session.userSignature}]`}
+                    </span>
+                  </div>
+
+                  <div className="max-h-[55vh] flex-1 overflow-y-auto bg-slate-200/85 p-4 lg:max-h-none lg:p-6">
+                    <div className="mx-auto flex min-h-[480px] max-w-[840px] flex-col rounded border border-slate-300 bg-white px-8 py-7 shadow-md lg:min-h-full lg:px-10 lg:py-8">
+                      <div className="border-b border-slate-200 pb-3">
+                        <div className="text-base font-bold text-slate-900">
+                          {openedWordDoc.label}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          Réf. Drive : {openedWordDoc.driveId || 'N/A'} · Client : {session.client} · Format : .{inferredExt}
+                        </div>
+                      </div>
+
+                      {sourcePayload && sourcePayload.baseTables.length > 0 && (
+                        <div className="mt-4 space-y-4">
+                          {sourcePayload.baseTables.map((tbl) => {
+                            const isRubriqueDesc =
+                              tbl.headers.length === 2 &&
+                              tbl.headers[0].trim().toLowerCase() === 'rubrique' &&
+                              tbl.headers[1].trim().toLowerCase() === 'description';
+                            return (
+                              <div
+                                key={tbl.id}
+                                className="overflow-hidden rounded-lg border border-slate-300/90 bg-white shadow-[0_6px_18px_-3px_rgba(15,23,42,0.22),0_3px_8px_-2px_rgba(15,23,42,0.14)]"
+                              >
+                                <div className="overflow-x-auto">
+                                  <table className="w-full border-collapse text-left text-xs">
+                                    <thead>
+                                      <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
+                                        {tbl.headers.map((h, i) => (
+                                          <th
+                                            key={i}
+                                            className={`px-3.5 py-2.5 whitespace-nowrap ${
+                                              isRubriqueDesc && i === 0
+                                                ? 'w-[28%] min-w-[140px] max-w-[230px]'
+                                                : ''
+                                            }`}
+                                          >
+                                            {h}
+                                          </th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200 bg-white">
+                                      {tbl.rows.map((r, rIdx) => (
+                                        <tr key={rIdx} className="divide-x divide-slate-200 bg-white">
+                                          {r.map((cell, cIdx) => (
+                                            <td
+                                              key={cIdx}
+                                              className={`px-3.5 py-2.5 text-slate-800 transition-colors hover:bg-[#EAF4FF] hover:ring-1 hover:ring-inset hover:ring-sky-500 ${
+                                                isRubriqueDesc && cIdx === 0
+                                                  ? 'font-medium text-slate-700'
+                                                  : ''
+                                              }`}
+                                            >
+                                              {cell || '—'}
+                                            </td>
+                                          ))}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <textarea
+                        rows={sourcePayload && sourcePayload.baseTables.length > 0 ? 7 : 18}
+                        readOnly={Boolean(openedWordDoc.locked)}
+                        value={currentBody}
+                        onChange={(e) => onUpdateWordBody(openedWordDoc.id, e.target.value)}
+                        placeholder={
+                          openedWordDoc.locked
+                            ? 'Document verrouillé — déverrouillez avec le code PIN pour modifier.'
+                            : "Observations ou contenu du document source..."
+                        }
+                        className={`mt-4 min-h-[160px] w-full flex-1 resize-none border-0 bg-transparent text-sm leading-relaxed placeholder:text-slate-400 focus:outline-none ${
+                          openedWordDoc.locked ? 'cursor-not-allowed text-slate-500' : 'text-slate-800'
+                        }`}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Interface Intégrer data (collecte JSON Feuille couverture) */}
           {integratedDataDoc && (
@@ -2214,19 +2430,219 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
               />
             )}
 
+          {/* Panneau Tables liées d'une Étape de mission (gauche) + TreeView conservée à droite */}
+          {!openedWordDoc &&
+            !integratedDataDoc &&
+            !integratedCollectionDoc &&
+            !(openedRecoInfoNode && openedRecoInfoRecord) &&
+            !openedAuditPlanState &&
+            !openedExportEtat &&
+            openedMissionStepNode && (
+              <MissionStepTableViewer
+                node={openedMissionStepNode}
+                session={session}
+                refreshKey={sqliteRefreshNonce}
+                flushTop
+                isLocked={
+                  isNodeLockedOrWithinLockedAncestor(trees, openedMissionStepNode.id) ||
+                  Boolean(openedMissionStepNode.locked)
+                }
+                onShareStep={onShareMissionStep}
+                onSendStepToChat={(stepNode, tables) => {
+                  if (onSendMissionStepToChat) {
+                    onSendMissionStepToChat(stepNode, tables);
+                  } else {
+                    onOpenDocumentInChat(stepNode);
+                  }
+                }}
+                onSqliteSynced={onSqliteSynced}
+                onClose={() => {
+                  setOpenedMissionStepNode(null);
+                  setShowStepHeaderSubmenu(false);
+                }}
+              />
+            )}
+
           {/* Arborescence Workflow & Team Workflow + Inspecteur contextuel */}
           <div
-            className={`flex min-h-0 flex-col overflow-hidden ${
+            className={`relative flex min-h-0 flex-col overflow-hidden ${
               openedWordDoc ||
               integratedDataDoc ||
               integratedCollectionDoc ||
               (openedRecoInfoNode && openedRecoInfoRecord) ||
               openedAuditPlanState ||
-              openedExportEtat
-                ? 'min-h-[180px] shrink-0 lg:w-[410px] lg:flex-none'
+              openedExportEtat ||
+              openedMissionStepNode
+                ? 'min-h-[180px] shrink-0 lg:w-[360px] xl:w-[390px] lg:flex-none'
                 : 'flex-1'
             }`}
           >
+            {/* Barre compacte + bouton sous-menu (boutons + recherche) quand une étape occupe toute la partie haute */}
+            {openedMissionStepNode &&
+              !openedWordDoc &&
+              !integratedDataDoc &&
+              !integratedCollectionDoc &&
+              !(openedRecoInfoNode && openedRecoInfoRecord) &&
+              !openedAuditPlanState &&
+              !openedExportEtat && (
+                <div className="relative shrink-0 border-b border-slate-800 bg-slate-950/90 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      aria-expanded={showStepHeaderSubmenu}
+                      onClick={() => setShowStepHeaderSubmenu((v) => !v)}
+                      className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer ${
+                        showStepHeaderSubmenu || searchQuery.trim().length > 0
+                          ? 'border-blue-500 bg-blue-950/70 text-blue-100'
+                          : 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                      }`}
+                    >
+                      <Menu className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                      <span>Menu &amp; Recherche</span>
+                      {searchQuery.trim().length > 0 && (
+                        <span className="rounded bg-blue-500/30 px-1 font-mono text-[10px] text-blue-200">
+                          filtre
+                        </span>
+                      )}
+                      <ChevronDown
+                        className={`h-3.5 w-3.5 transition-transform ${
+                          showStepHeaderSubmenu ? 'rotate-180' : ''
+                        }`}
+                        aria-hidden="true"
+                      />
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] text-slate-400 tabular-nums">
+                        {checkedNodes.length} coché{checkedNodes.length > 1 ? 's' : ''}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        aria-label="Fermer le menu coulissant"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 cursor-pointer"
+                      >
+                        <X className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {showStepHeaderSubmenu && (
+                    <div className="mt-2 space-y-2.5 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl">
+                      <div className="relative">
+                        <Search
+                          className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-slate-400"
+                          aria-hidden="true"
+                        />
+                        <input
+                          type="text"
+                          autoFocus
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          placeholder="Rechercher un workflow, exercice, [SEK]..."
+                          className="w-full rounded-md border border-slate-700 bg-slate-950 py-1.5 pr-7 pl-8 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-2 focus:outline-blue-500"
+                        />
+                        {searchQuery && (
+                          <button
+                            type="button"
+                            onClick={() => setSearchQuery('')}
+                            className="absolute top-1/2 right-2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {(onShareNode || onShareMissionStep) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowStepHeaderSubmenu(false);
+                              if (openedMissionStepNode && onShareNode) {
+                                onShareNode(openedMissionStepNode);
+                                return;
+                              }
+                              const checkedFirst =
+                                checkedNonRootNodes[0] ??
+                                (highlightedNodeId ? findNodeById(trees, highlightedNodeId) : null) ??
+                                findNodeById(trees, 'user-2026-ex-audit') ??
+                                visibleRoots[0];
+                              if (checkedFirst && onShareNode) {
+                                onShareNode(checkedFirst);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-emerald-600/80 bg-emerald-600/20 px-2.5 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-600 hover:text-white cursor-pointer"
+                          >
+                            <Share2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <span className="truncate">Partager</span>
+                          </button>
+                        )}
+
+                        {onOpenSuiviRecosAnalyticsTab && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowStepHeaderSubmenu(false);
+                              onOpenSuiviRecosAnalyticsTab();
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-blue-700/70 bg-blue-950/60 px-2.5 py-1.5 text-xs font-medium text-blue-200 hover:bg-blue-900/70 cursor-pointer"
+                          >
+                            <BarChart3 className="h-3.5 w-3.5 shrink-0 text-blue-400" aria-hidden="true" />
+                            <span className="truncate">Analytics Recos</span>
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowStepHeaderSubmenu(false);
+                            onOpenAuditPlanTab();
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-teal-700/70 bg-teal-950/60 px-2.5 py-1.5 text-xs font-medium text-teal-200 hover:bg-teal-900/70 cursor-pointer"
+                        >
+                          <ListTodo className="h-3.5 w-3.5 shrink-0 text-teal-400" aria-hidden="true" />
+                          <span className="truncate">Plan d&apos;audit (8h/j)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowStatsDashboard((v) => !v)}
+                          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium cursor-pointer ${
+                            showStatsDashboard
+                              ? 'border-blue-500 bg-blue-950/70 text-blue-200'
+                              : 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                          }`}
+                        >
+                          <BarChart3 className="h-3.5 w-3.5 shrink-0 text-blue-400" aria-hidden="true" />
+                          <span className="truncate">Stats &amp; Gantt</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowApiPanel((v) => !v)}
+                          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs font-medium cursor-pointer ${
+                            showApiPanel
+                              ? 'border-blue-500 bg-blue-950/70 text-blue-200'
+                              : 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                          }`}
+                        >
+                          <KeyRound className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                          <span className="truncate">Clés API</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowStepHeaderSubmenu(false)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-700 cursor-pointer"
+                        >
+                          <span>Masquer sous-menu</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             {inspector && (
               <WorkflowNodeInspector
                 inspector={inspector}
@@ -3093,6 +3509,37 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                       </button>
                     )}
 
+                    {resolveMissionStepClassification(ctxNode).isStep && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={nodeEffectivelyLocked}
+                        onClick={() => {
+                          openMissionStepPanel(ctxNode);
+                          setContextMenu(null);
+                        }}
+                        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-emerald-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                      >
+                        <Table2 className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                        <span>Ouvrir étape (Tables liées · Forme de base)</span>
+                      </button>
+                    )}
+
+                    {onShareNode && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          onShareNode(ctxNode);
+                          setContextMenu(null);
+                        }}
+                        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-emerald-300 hover:bg-slate-800 hover:text-white cursor-pointer"
+                      >
+                        <Share2 className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                        <span>Partager par URL (équipe / sans compte)</span>
+                      </button>
+                    )}
+
                     <button
                       type="button"
                       role="menuitem"
@@ -3104,7 +3551,13 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                       className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
                     >
                       <FileSpreadsheet className="h-3.5 w-3.5 text-blue-400" aria-hidden="true" />
-                      <span>Ouvrir (Document Word)</span>
+                      <span>
+                        {resolveMissionStepClassification(ctxNode).isStep
+                          ? 'Ouvrir (Document Word)'
+                          : `Ouvrir (Forme source${
+                              ctxNode.sourceDocFormat ? ` .${ctxNode.sourceDocFormat}` : ''
+                            })`}
+                      </span>
                     </button>
 
                     <button
