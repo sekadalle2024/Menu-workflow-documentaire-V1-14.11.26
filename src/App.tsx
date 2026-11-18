@@ -30,6 +30,7 @@ import {
   buildInitialSuiviRecosWordBodies,
   updateRecoMetaInTree,
 } from './data/suiviRecosSimulation';
+import { updateRiskMetaInTree } from './data/riskManagementData';
 import {
   FeuilleCouvertureDocument,
   generateCollectionDataJson,
@@ -48,6 +49,7 @@ import {
   ClientSessionConfig,
   MissionTodoTask,
   RecoSourceMetadata,
+  RiskManagementMetadata,
   WorkflowNatureId,
   WorkflowNodeStatus,
   WorkflowTreeNode,
@@ -216,6 +218,8 @@ export default function App() {
         'user-2026-ex-audit-tres-real',
         'user-2026-ex-audit-tres-conc',
         'user-2026-plan-audit',
+        'user-2026-risk-management',
+        'user-2026-rm-carto',
         'team-ex-2026',
         'team-2026-ex-audit',
         'team-2026-ex-audit-tresorerie',
@@ -1811,6 +1815,17 @@ export default function App() {
     [session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
+  const handleUpdateRiskMeta = useCallback(
+    (riskNodeId: string, patch: Partial<RiskManagementMetadata>) => {
+      pushUndoSnapshot('Modification fiche Risk management');
+      setWorkflowTrees((prev) =>
+        updateRiskMetaInTree(prev, riskNodeId, patch, session.userSignature)
+      );
+      flashStatus('Informations du risque mises à jour dans la cartographie.');
+    },
+    [session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
   const handleInitClient = useCallback(() => {
     setSession(INITIAL_CLIENT_SESSION);
     setWorkflowTrees(createInitialWorkflowTrees());
@@ -2891,6 +2906,7 @@ export default function App() {
         onUpdatePlanStepDates={handleUpdatePlanStepDates}
         onUpdatePlanMissionMeta={handleUpdatePlanMissionMeta}
         onUpdateRecoMeta={handleUpdateRecoMeta}
+        onUpdateRiskMeta={handleUpdateRiskMeta}
         onOpenAuditPlanTab={() => {
           setActiveTab('audit-plan');
           setIsRightMenuOpen(false);

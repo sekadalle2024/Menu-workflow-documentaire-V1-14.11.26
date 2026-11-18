@@ -13,6 +13,7 @@ import {
   GraduationCap,
   ListChecks,
   PanelRightOpen,
+  ShieldAlert,
   ShieldCheck,
 } from 'lucide-react';
 import { WORKFLOW_SIDEBAR_ITEMS } from '../data/workflowCatalog';
@@ -40,6 +41,8 @@ function renderWorkflowIcon(iconKey: string, isActive: boolean) {
       return <ListChecks className={cls} aria-hidden="true" />;
     case 'calendar-range':
       return <CalendarRange className={cls} aria-hidden="true" />;
+    case 'shield-alert':
+      return <ShieldAlert className={cls} aria-hidden="true" />;
     case 'shield-check':
       return <ShieldCheck className={cls} aria-hidden="true" />;
     case 'file-spreadsheet':

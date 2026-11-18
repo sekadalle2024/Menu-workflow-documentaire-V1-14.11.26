@@ -3,6 +3,7 @@ export type WorkflowNatureId =
   | 'ex-audit'
   | 'suivi-recos'
   | 'plan-audit'
+  | 'risk-management'
   | 'perm-cac'
   | 'ex-cac'
   | 'manuel-proc-cac'
@@ -144,6 +145,32 @@ export interface RecoSourceMetadata {
   intituleRecos: string;
 }
 
+export interface RiskManagementMetadata {
+  no: number;
+  cycle: string;
+  processus: string;
+  direction: string;
+  operationnel: string;
+  refRisque: string;
+  risque: string;
+  probabilite: string;
+  impact: string;
+  evaluationRisque: string;
+  planAction: string;
+  controleNiveau1: string;
+  controleNiveau2: string;
+  controleNiveau3: string;
+  causes: string;
+  consequences: string;
+  facteursRisque: string;
+  facteurDeclencheur: string;
+  familleBale: string;
+  ligneMetierBale: string;
+  categorieBale: string;
+  sousCategorieBale: string;
+  natureRisque: string;
+}
+
 export type MissionStepFormatType = 1 | 2 | 3 | 4;
 
 export type MissionPhaseName =
@@ -176,6 +203,7 @@ export interface WorkflowTreeNode {
   recoMeta?: RecoSourceMetadata;
   planMissionMeta?: AuditPlanMissionMeta;
   planStepMeta?: AuditPlanStepMeta;
+  riskMeta?: RiskManagementMetadata;
   isMissionStep?: boolean;
   missionStepFormatType?: MissionStepFormatType;
   missionStepKey?: string;

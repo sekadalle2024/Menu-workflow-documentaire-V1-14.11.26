@@ -28,6 +28,7 @@ import {
   buildSuiviRecos2025Children,
 } from './suiviRecosSimulation';
 import { buildPlanAudit2026Children } from './auditPlanWorkflowData';
+import { buildRiskManagement2026Children } from './riskManagementData';
 import {
   buildAuditTresorerie2026Children,
   buildMissionDossierStandardChildren,
@@ -94,6 +95,18 @@ export const WORKFLOW_SIDEBAR_ITEMS: WorkflowCategoryMeta[] = [
       { id: 'sm-plan-m1', label: 'Mission 01 · Maintenance Préventive & GMAO', targetNodeSuffix: '2026-plan-m-1' },
       { id: 'sm-plan-m5', label: 'Mission 05 · Achats Industriels & Sous-Traitance', targetNodeSuffix: '2026-plan-m-5' },
       { id: 'sm-plan-m6', label: 'Mission 06 · Cybersécurité OT / SCADA', targetNodeSuffix: '2026-plan-m-6' },
+    ],
+  },
+  {
+    id: 'risk-management',
+    label: 'Workflow Risk management',
+    shortLabel: 'Risk Management',
+    iconKey: 'shield-alert',
+    subItems: [
+      { id: 'sm-rm-carto', label: '2026 · Travaux - cartographie des risques (100)', targetNodeSuffix: '2026-rm-carto' },
+      { id: 'sm-rm-gouv', label: 'Cycle Gouvernance et Pilotage (01–06)', targetNodeSuffix: '2026-rm-cycle-1-cycle-gouvernance-et-pilotage' },
+      { id: 'sm-rm-credit', label: 'Cycle Engagements et Crédit (35–50)', targetNodeSuffix: '2026-rm-cycle-5-cycle-engagements-et-credit' },
+      { id: 'sm-rm-si', label: 'Cycle SI et Cybersécurité (78–88)', targetNodeSuffix: '2026-rm-cycle-9-cycle-si-et-cybersecurite' },
     ],
   },
   {
@@ -319,6 +332,13 @@ function buildExerciceFirstTrees(prefix: 'user' | 'team'): WorkflowTreeNode[] {
       nodeType: 'nature',
       natureId: 'plan-audit',
       children: buildPlanAudit2026Children(prefix),
+    },
+    {
+      id: `${prefix}-2026-risk-management`,
+      label: 'Workflow Risk management',
+      nodeType: 'nature',
+      natureId: 'risk-management',
+      children: buildRiskManagement2026Children(prefix),
     },
     {
       id: `${prefix}-2026-perm-cac`,

@@ -69,6 +69,7 @@ import {
   ClientSessionConfig,
   MissionTodoTask,
   RecoSourceMetadata,
+  RiskManagementMetadata,
   WorkflowNatureId,
   WorkflowNodeStatus,
   WorkflowTreeNode,
@@ -94,9 +95,14 @@ import {
   extractSuiviRecosFromTrees,
   findRecoRecordByRefOrLabel,
 } from '../data/suiviRecosSimulation';
+import {
+  extractRisksFromTrees,
+  findRiskRecordByRefOrLabel,
+} from '../data/riskManagementData';
 import { computeContextualWorkflowMetrics } from '../data/auditPlanWorkflowData';
 import { IntegratedDataViewer } from './IntegratedDataViewer';
 import { RecoInfoManagerPanel, RecoPanelViewMode } from './RecoInfoManagerPanel';
+import { RiskDetailManagerPanel } from './RiskDetailManagerPanel';
 import {
   NodeInspectorState,
   WorkflowNodeInspector,
@@ -268,6 +274,10 @@ interface RightSlidingMenuProps {
     recoNodeId: string,
     patch: Partial<RecoSourceMetadata>
   ) => void;
+  onUpdateRiskMeta?: (
+    riskNodeId: string,
+    patch: Partial<RiskManagementMetadata>
+  ) => void;
   onOpenAuditPlanTab: () => void;
   onOpenSuiviRecosAnalyticsTab?: () => void;
   onSendMissionStepToChat?: (node: WorkflowTreeNode, tables: ParsedBaseTable[]) => void;
@@ -378,6 +388,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   onUpdatePlanStepDates,
   onUpdatePlanMissionMeta,
   onUpdateRecoMeta,
+  onUpdateRiskMeta,
   onOpenAuditPlanTab,
   onOpenSuiviRecosAnalyticsTab,
   onSendMissionStepToChat,
@@ -453,6 +464,10 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   const [openedRecoScopeId, setOpenedRecoScopeId] = useState<string | undefined>(
     undefined
   );
+  const [openedRiskInfoId, setOpenedRiskInfoId] = useState<string | null>(null);
+  const [openedRiskScopeId, setOpenedRiskScopeId] = useState<string | undefined>(
+    undefined
+  );
   const [openedAuditPlanState, setOpenedAuditPlanState] = useState<{
     mode: AuditPlanPanelMode;
     scopeNodeId?: string;
@@ -487,12 +502,28 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     [openedRecoInfoNode]
   );
 
+  const openedRiskInfoNode = useMemo(
+    () => (openedRiskInfoId ? findNodeById(trees, openedRiskInfoId) : null),
+    [trees, openedRiskInfoId]
+  );
+
+  const openedRiskInfoRecord = useMemo(
+    () =>
+      openedRiskInfoNode
+        ? openedRiskInfoNode.riskMeta ??
+          findRiskRecordByRefOrLabel(openedRiskInfoNode.label) ??
+          null
+        : null,
+    [openedRiskInfoNode]
+  );
+
   const isMissionStepTopMode = Boolean(
     openedMissionStepNode &&
       !openedWordDoc &&
       !integratedDataDoc &&
       !integratedCollectionDoc &&
       !(openedRecoInfoNode && openedRecoInfoRecord) &&
+      !(openedRiskInfoNode && openedRiskInfoRecord) &&
       !openedAuditPlanState &&
       !openedExportEtat
   );
@@ -501,6 +532,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     if (openedWordDoc || integratedDataDoc || integratedCollectionDoc) {
       setOpenedRecoInfoId(null);
       setOpenedRecoScopeId(undefined);
+      setOpenedRiskInfoId(null);
+      setOpenedRiskScopeId(undefined);
       setOpenedAuditPlanState(null);
       setOpenedExportEtat(null);
       setOpenedMissionStepNode(null);
@@ -517,6 +550,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     if (integratedCollectionDoc) onCloseIntegratedCollection();
     setOpenedRecoInfoId(null);
     setOpenedRecoScopeId(undefined);
+    setOpenedRiskInfoId(null);
+    setOpenedRiskScopeId(undefined);
     setOpenedAuditPlanState(null);
     setOpenedExportEtat(null);
     setOpenedMissionStepNode(targetNode);
@@ -534,6 +569,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     if (integratedCollectionDoc) onCloseIntegratedCollection();
     setOpenedRecoInfoId(null);
     setOpenedRecoScopeId(undefined);
+    setOpenedRiskInfoId(null);
+    setOpenedRiskScopeId(undefined);
     setOpenedAuditPlanState(null);
     setOpenedMissionStepNode(null);
     const resolvedScopeId =
@@ -564,6 +601,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     if (openedWordDoc) onCloseWordDoc();
     if (integratedDataDoc) onCloseIntegratedData();
     if (integratedCollectionDoc) onCloseIntegratedCollection();
+    setOpenedRiskInfoId(null);
+    setOpenedRiskScopeId(undefined);
     setOpenedAuditPlanState(null);
     setOpenedExportEtat(null);
     setOpenedMissionStepNode(null);
@@ -596,6 +635,50 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     onJumpToNode(resolvedNode.id);
   };
 
+  const openRiskDetailPanel = (
+    targetNode: WorkflowTreeNode | null,
+    scopeId?: string
+  ) => {
+    if (openedWordDoc) onCloseWordDoc();
+    if (integratedDataDoc) onCloseIntegratedData();
+    if (integratedCollectionDoc) onCloseIntegratedCollection();
+    setOpenedRecoInfoId(null);
+    setOpenedRecoScopeId(undefined);
+    setOpenedAuditPlanState(null);
+    setOpenedExportEtat(null);
+    setOpenedMissionStepNode(null);
+
+    const directRisk =
+      targetNode?.riskMeta ??
+      (targetNode && targetNode.natureId === 'risk-management' && targetNode.nodeType === 'document'
+        ? findRiskRecordByRefOrLabel(targetNode.label)
+        : undefined);
+
+    let resolvedNode: WorkflowTreeNode | undefined =
+      directRisk && targetNode ? targetNode : undefined;
+    let resolvedScopeId = scopeId;
+
+    if (!resolvedNode) {
+      const candidateScopeId = scopeId ?? targetNode?.id;
+      const scopedEntries = candidateScopeId
+        ? extractRisksFromTrees(trees, candidateScopeId)
+        : [];
+      if (scopedEntries.length > 0) {
+        resolvedNode = scopedEntries[0].node;
+        resolvedScopeId = candidateScopeId;
+      } else {
+        const fallbackEntries = extractRisksFromTrees(trees);
+        resolvedNode = fallbackEntries[0]?.node;
+        resolvedScopeId = undefined;
+      }
+    }
+
+    if (!resolvedNode) return;
+    setOpenedRiskScopeId(resolvedScopeId);
+    setOpenedRiskInfoId(resolvedNode.id);
+    onJumpToNode(resolvedNode.id);
+  };
+
   const openAuditPlanPanel = (
     panelMode: AuditPlanPanelMode,
     targetNode: WorkflowTreeNode | null
@@ -604,6 +687,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     if (integratedDataDoc) onCloseIntegratedData();
     if (integratedCollectionDoc) onCloseIntegratedCollection();
     setOpenedRecoInfoId(null);
+    setOpenedRiskInfoId(null);
+    setOpenedRiskScopeId(undefined);
     setOpenedExportEtat(null);
     setOpenedMissionStepNode(null);
 
@@ -1013,11 +1098,18 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                   (node.nodeType === 'sous-section' &&
                     node.natureId === 'suivi-recos' &&
                     Boolean(findRecoRecordByRefOrLabel(node.label)));
+                const isRiskDocNode =
+                  Boolean(node.riskMeta) ||
+                  (node.nodeType === 'document' &&
+                    node.natureId === 'risk-management' &&
+                    Boolean(findRiskRecordByRefOrLabel(node.label)));
                 if (node.nodeType === 'document') {
                   if (!effectivelyLocked) {
                     const stepCls = resolveMissionStepClassification(node);
                     if (stepCls.isStep) {
                       openMissionStepPanel(node);
+                    } else if (isRiskDocNode) {
+                      openRiskDetailPanel(node);
                     } else {
                       onOpenWordDoc(node);
                     }
@@ -1361,6 +1453,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
           integratedDataDoc ||
           integratedCollectionDoc ||
           (openedRecoInfoNode && openedRecoInfoRecord) ||
+          (openedRiskInfoNode && openedRiskInfoRecord) ||
           openedAuditPlanState ||
           openedExportEtat ||
           openedMissionStepNode
@@ -2385,11 +2478,40 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
               />
             )}
 
+          {/* Panneau Détail du risque (Workflow Risk management · 23 colonnes accordéon) */}
+          {!openedWordDoc &&
+            !integratedDataDoc &&
+            !integratedCollectionDoc &&
+            !(openedRecoInfoNode && openedRecoInfoRecord) &&
+            openedRiskInfoNode &&
+            openedRiskInfoRecord && (
+              <RiskDetailManagerPanel
+                node={openedRiskInfoNode}
+                record={openedRiskInfoRecord}
+                isLocked={
+                  isNodeLockedOrWithinLockedAncestor(trees, openedRiskInfoNode.id) ||
+                  Boolean(openedRiskInfoNode.locked)
+                }
+                trees={trees}
+                scopeNodeId={openedRiskScopeId}
+                onClose={() => {
+                  setOpenedRiskInfoId(null);
+                  setOpenedRiskScopeId(undefined);
+                }}
+                onSelectRiskNode={(riskNodeId) => {
+                  setOpenedRiskInfoId(riskNodeId);
+                  onJumpToNode(riskNodeId);
+                }}
+                onUpdateRiskMeta={onUpdateRiskMeta}
+              />
+            )}
+
           {/* Panneau Plan annuel d'audit (10 col / Plan intégral / Planif 08h / Gantt 2 niveaux) */}
           {!openedWordDoc &&
             !integratedDataDoc &&
             !integratedCollectionDoc &&
             !(openedRecoInfoNode && openedRecoInfoRecord) &&
+            !(openedRiskInfoNode && openedRiskInfoRecord) &&
             openedAuditPlanState && (
               <AuditPlanWorkflowPanel
                 compact
@@ -2415,6 +2537,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             !integratedDataDoc &&
             !integratedCollectionDoc &&
             !(openedRecoInfoNode && openedRecoInfoRecord) &&
+            !(openedRiskInfoNode && openedRiskInfoRecord) &&
             !openedAuditPlanState &&
             openedExportEtat && (
               <ExportEtatsPanel
@@ -2435,6 +2558,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             !integratedDataDoc &&
             !integratedCollectionDoc &&
             !(openedRecoInfoNode && openedRecoInfoRecord) &&
+            !(openedRiskInfoNode && openedRiskInfoRecord) &&
             !openedAuditPlanState &&
             !openedExportEtat &&
             openedMissionStepNode && (
@@ -2470,6 +2594,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
               integratedDataDoc ||
               integratedCollectionDoc ||
               (openedRecoInfoNode && openedRecoInfoRecord) ||
+              (openedRiskInfoNode && openedRiskInfoRecord) ||
               openedAuditPlanState ||
               openedExportEtat ||
               openedMissionStepNode
@@ -2483,6 +2608,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
               !integratedDataDoc &&
               !integratedCollectionDoc &&
               !(openedRecoInfoNode && openedRecoInfoRecord) &&
+              !(openedRiskInfoNode && openedRiskInfoRecord) &&
               !openedAuditPlanState &&
               !openedExportEtat && (
                 <div className="relative shrink-0 border-b border-slate-800 bg-slate-950/90 px-3 py-2">
@@ -2870,6 +2996,45 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                 >
                   <GanttChart className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
                   <span>Gantt Plan annuel d&apos;audit (2026)</span>
+                </button>
+              </div>
+            );
+          })()}
+
+          {/* Section Risk management & action Détail du risque */}
+          {(() => {
+            const ctxNode = contextMenu.node;
+            const showRiskMenu =
+              !ctxNode ||
+              ctxNode.natureId === 'risk-management' ||
+              Boolean(ctxNode.riskMeta) ||
+              ctxNode.nodeType === 'root' ||
+              (ctxNode.nodeType === 'exercice' &&
+                extractRisksFromTrees(trees, ctxNode.id).length > 0);
+            if (!showRiskMenu) return null;
+
+            return (
+              <div className="border-b border-rose-800/60 bg-rose-950/20 py-1">
+                <div className="flex items-center justify-between gap-2 px-3 py-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-rose-300">
+                    Risk management
+                  </span>
+                  <span className="font-mono text-[10px] text-rose-300/80">
+                    2026 · 23 col.
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openRiskDetailPanel(ctxNode);
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                >
+                  <ShieldAlert className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                  <span>Détail du risque</span>
                 </button>
               </div>
             );
