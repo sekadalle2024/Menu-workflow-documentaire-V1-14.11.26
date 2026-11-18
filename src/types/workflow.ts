@@ -145,6 +145,26 @@ export interface RecoSourceMetadata {
   intituleRecos: string;
 }
 
+export interface RiskCustomRubrique {
+  id: string;
+  key: string;
+  label: string;
+  header: string;
+  multiline?: boolean;
+}
+
+export type RiskSortField =
+  | 'no'
+  | 'refRisque'
+  | 'risque'
+  | 'evaluationRisque'
+  | 'probabilite'
+  | 'impact'
+  | 'cycle'
+  | 'direction';
+
+export type RiskSortDirection = 'asc' | 'desc';
+
 export interface RiskManagementMetadata {
   no: number;
   cycle: string;
@@ -169,6 +189,7 @@ export interface RiskManagementMetadata {
   categorieBale: string;
   sousCategorieBale: string;
   natureRisque: string;
+  customFields?: Record<string, string>;
 }
 
 export type MissionStepFormatType = 1 | 2 | 3 | 4;

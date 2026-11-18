@@ -23,7 +23,9 @@ import {
   Dices,
   Download,
   ExternalLink,
+  FileDown,
   FileSpreadsheet,
+  FileUp,
   Folder,
   FolderKanban,
   FolderOpen,
@@ -69,7 +71,10 @@ import {
   ClientSessionConfig,
   MissionTodoTask,
   RecoSourceMetadata,
+  RiskCustomRubrique,
   RiskManagementMetadata,
+  RiskSortDirection,
+  RiskSortField,
   WorkflowNatureId,
   WorkflowNodeStatus,
   WorkflowTreeNode,
@@ -96,13 +101,17 @@ import {
   findRecoRecordByRefOrLabel,
 } from '../data/suiviRecosSimulation';
 import {
+  collectDirectionContainersFromTrees,
   extractRisksFromTrees,
   findRiskRecordByRefOrLabel,
 } from '../data/riskManagementData';
 import { computeContextualWorkflowMetrics } from '../data/auditPlanWorkflowData';
 import { IntegratedDataViewer } from './IntegratedDataViewer';
 import { RecoInfoManagerPanel, RecoPanelViewMode } from './RecoInfoManagerPanel';
-import { RiskDetailManagerPanel } from './RiskDetailManagerPanel';
+import {
+  RiskDetailManagerPanel,
+  RiskDetailPanelMode,
+} from './RiskDetailManagerPanel';
 import {
   NodeInspectorState,
   WorkflowNodeInspector,
@@ -123,6 +132,12 @@ import {
   ParsedBaseTable,
   resolveMissionStepClassification,
 } from '../data/missionStepsFormatData';
+import {
+  getStepTablesFromSqlite,
+  importMissionStepFromDocFile,
+  loadEAuditSqliteDb,
+} from '../utils/eAuditSqliteStore';
+import { exportMissionStepToDoc } from '../utils/missionStepDocExporter';
 
 interface TriCheckboxProps {
   state: 'checked' | 'unchecked' | 'indeterminate';
@@ -278,6 +293,25 @@ interface RightSlidingMenuProps {
     riskNodeId: string,
     patch: Partial<RiskManagementMetadata>
   ) => void;
+  riskCustomRubriques?: RiskCustomRubrique[];
+  onAddRisk?: (targetNodeId?: string) => string | null;
+  onDeleteRisk?: (riskNodeId: string) => string | null;
+  onDuplicateRisk?: (riskNodeId: string) => string | null;
+  onTransferRisk?: (
+    riskNodeId: string,
+    destinationDirectionNodeId: string
+  ) => boolean;
+  onAddRiskRubrique?: (input: {
+    label: string;
+    multiline?: boolean;
+    initialValueForCurrent?: string;
+    riskNodeId: string;
+  }) => void;
+  onSortRisks?: (
+    field: RiskSortField,
+    direction: RiskSortDirection,
+    scopeNodeId?: string
+  ) => void;
   onOpenAuditPlanTab: () => void;
   onOpenSuiviRecosAnalyticsTab?: () => void;
   onSendMissionStepToChat?: (node: WorkflowTreeNode, tables: ParsedBaseTable[]) => void;
@@ -389,6 +423,13 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   onUpdatePlanMissionMeta,
   onUpdateRecoMeta,
   onUpdateRiskMeta,
+  riskCustomRubriques = [],
+  onAddRisk,
+  onDeleteRisk,
+  onDuplicateRisk,
+  onTransferRisk,
+  onAddRiskRubrique,
+  onSortRisks,
   onOpenAuditPlanTab,
   onOpenSuiviRecosAnalyticsTab,
   onSendMissionStepToChat,
@@ -468,6 +509,12 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   const [openedRiskScopeId, setOpenedRiskScopeId] = useState<string | undefined>(
     undefined
   );
+  const [openedRiskPanelMode, setOpenedRiskPanelMode] =
+    useState<RiskDetailPanelMode>('detail');
+  const [openedRiskModeNonce, setOpenedRiskModeNonce] = useState(0);
+  const [openedRiskActionBanner, setOpenedRiskActionBanner] = useState<string | null>(
+    null
+  );
   const [openedAuditPlanState, setOpenedAuditPlanState] = useState<{
     mode: AuditPlanPanelMode;
     scopeNodeId?: string;
@@ -482,10 +529,13 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   } | null>(null);
   const [openedMissionStepNode, setOpenedMissionStepNode] = useState<WorkflowTreeNode | null>(null);
   const [showStepHeaderSubmenu, setShowStepHeaderSubmenu] = useState(false);
+  const [isImportingStepDoc, setIsImportingStepDoc] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const importDirInputRef = useRef<HTMLInputElement | null>(null);
   const importTargetIdRef = useRef<string | null>(null);
+  const stepDocInputRef = useRef<HTMLInputElement | null>(null);
+  const stepDocTargetNodeRef = useRef<WorkflowTreeNode | null>(null);
 
   const openedRecoInfoNode = useMemo(
     () => (openedRecoInfoId ? findNodeById(trees, openedRecoInfoId) : null),
@@ -515,6 +565,11 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
           null
         : null,
     [openedRiskInfoNode]
+  );
+
+  const riskDirectionOptions = useMemo(
+    () => collectDirectionContainersFromTrees(trees),
+    [trees]
   );
 
   const isMissionStepTopMode = Boolean(
@@ -557,6 +612,74 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     setOpenedMissionStepNode(targetNode);
     setShowStepHeaderSubmenu(false);
     onJumpToNode(targetNode.id);
+  };
+
+  const triggerStepDocImportFromMenu = (targetNode: WorkflowTreeNode) => {
+    if (isNodeLockedOrWithinLockedAncestor(trees, targetNode.id) || targetNode.locked) {
+      return;
+    }
+    stepDocTargetNodeRef.current = targetNode;
+    stepDocInputRef.current?.click();
+  };
+
+  const handleContextMenuStepDocChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    const targetNode = stepDocTargetNodeRef.current;
+    e.target.value = '';
+    if (!file || !targetNode) return;
+    if (isNodeLockedOrWithinLockedAncestor(trees, targetNode.id) || targetNode.locked) {
+      return;
+    }
+    setIsImportingStepDoc(true);
+    try {
+      const result = await importMissionStepFromDocFile(
+        file,
+        targetNode,
+        session.client,
+        'user_admin_oha'
+      );
+      const updatedNode: WorkflowTreeNode = {
+        ...targetNode,
+        sqliteHasData: true,
+      };
+      onSqliteSynced?.(
+        `Étape « ${targetNode.label} » importée depuis « ${file.name} » (${result.tables.length} table(s)) et sauvegardée dans SQLite`,
+        updatedNode,
+        result.tables
+      );
+      openMissionStepPanel(updatedNode);
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : `Impossible d'importer le fichier « ${file.name} ».`;
+      onSqliteSynced?.(`Erreur import étape mission (.doc) : ${msg}`);
+    } finally {
+      setIsImportingStepDoc(false);
+    }
+  };
+
+  const handleExportStepDocFromMenu = (targetNode: WorkflowTreeNode) => {
+    try {
+      const db = loadEAuditSqliteDb(session);
+      const { tables } = getStepTablesFromSqlite(db, targetNode, session.client);
+      const res = exportMissionStepToDoc({
+        node: targetNode,
+        tables,
+        session,
+      });
+      onSqliteSynced?.(
+        `Étape « ${targetNode.label} » exportée en .doc (${res.filename} · ${res.tableCount} table(s))`
+      );
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Impossible d'exporter cette étape de mission en .doc.";
+      onSqliteSynced?.(`Erreur export étape mission (.doc) : ${msg}`);
+    }
   };
 
   const openExportEtatPanel = (
@@ -637,7 +760,9 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
 
   const openRiskDetailPanel = (
     targetNode: WorkflowTreeNode | null,
-    scopeId?: string
+    scopeId?: string,
+    mode: RiskDetailPanelMode = 'detail',
+    banner: string | null = null
   ) => {
     if (openedWordDoc) onCloseWordDoc();
     if (integratedDataDoc) onCloseIntegratedData();
@@ -666,6 +791,9 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
       if (scopedEntries.length > 0) {
         resolvedNode = scopedEntries[0].node;
         resolvedScopeId = candidateScopeId;
+      } else if (openedRiskInfoNode) {
+        resolvedNode = openedRiskInfoNode;
+        resolvedScopeId = openedRiskScopeId;
       } else {
         const fallbackEntries = extractRisksFromTrees(trees);
         resolvedNode = fallbackEntries[0]?.node;
@@ -676,7 +804,79 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     if (!resolvedNode) return;
     setOpenedRiskScopeId(resolvedScopeId);
     setOpenedRiskInfoId(resolvedNode.id);
+    setOpenedRiskPanelMode(mode);
+    setOpenedRiskModeNonce((n) => n + 1);
+    setOpenedRiskActionBanner(banner);
     onJumpToNode(resolvedNode.id);
+  };
+
+  const resolveTargetRiskNode = (ctxNode: WorkflowTreeNode | null): WorkflowTreeNode | null => {
+    if (
+      ctxNode &&
+      (ctxNode.riskMeta ||
+        (ctxNode.natureId === 'risk-management' && ctxNode.nodeType === 'document'))
+    ) {
+      return ctxNode;
+    }
+    if (openedRiskInfoNode) return openedRiskInfoNode;
+    if (ctxNode) {
+      const scoped = extractRisksFromTrees(trees, ctxNode.id);
+      if (scoped.length > 0) return scoped[0].node;
+    }
+    return extractRisksFromTrees(trees)[0]?.node ?? null;
+  };
+
+  const handleRiskAddAction = (ctxNode: WorkflowTreeNode | null) => {
+    if (!onAddRisk) return;
+    const insertRefId = ctxNode?.id ?? openedRiskInfoNode?.id;
+    const createdId = onAddRisk(insertRefId);
+    if (!createdId) return;
+    if (openedWordDoc) onCloseWordDoc();
+    if (integratedDataDoc) onCloseIntegratedData();
+    if (integratedCollectionDoc) onCloseIntegratedCollection();
+    setOpenedRecoInfoId(null);
+    setOpenedRecoScopeId(undefined);
+    setOpenedAuditPlanState(null);
+    setOpenedExportEtat(null);
+    setOpenedMissionStepNode(null);
+    setOpenedRiskScopeId(undefined);
+    setOpenedRiskInfoId(createdId);
+    setOpenedRiskPanelMode('blank-new');
+    setOpenedRiskModeNonce((n) => n + 1);
+    setOpenedRiskActionBanner('Nouvelle page de détail vierge créée — renseignez les rubriques ci-dessous.');
+  };
+
+  const handleRiskDeleteAction = (riskNodeId: string) => {
+    if (!onDeleteRisk) return;
+    const nextRiskId = onDeleteRisk(riskNodeId);
+    if (nextRiskId) {
+      setOpenedRiskInfoId(nextRiskId);
+      setOpenedRiskPanelMode('detail');
+      setOpenedRiskModeNonce((n) => n + 1);
+      setOpenedRiskActionBanner('Risque supprimé — redirection automatique vers le risque suivant.');
+    } else {
+      setOpenedRiskInfoId(null);
+      setOpenedRiskScopeId(undefined);
+      setOpenedRiskActionBanner(null);
+    }
+  };
+
+  const handleRiskDuplicateAction = (riskNodeId: string) => {
+    if (!onDuplicateRisk) return;
+    const duplicatedId = onDuplicateRisk(riskNodeId);
+    if (!duplicatedId) return;
+    if (openedWordDoc) onCloseWordDoc();
+    if (integratedDataDoc) onCloseIntegratedData();
+    if (integratedCollectionDoc) onCloseIntegratedCollection();
+    setOpenedRecoInfoId(null);
+    setOpenedRecoScopeId(undefined);
+    setOpenedAuditPlanState(null);
+    setOpenedExportEtat(null);
+    setOpenedMissionStepNode(null);
+    setOpenedRiskInfoId(duplicatedId);
+    setOpenedRiskPanelMode('detail');
+    setOpenedRiskModeNonce((n) => n + 1);
+    setOpenedRiskActionBanner('Risque dupliqué — affichage de la fiche dupliquée.');
   };
 
   const openAuditPlanPanel = (
@@ -1433,6 +1633,16 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             onImportDirectoryToNode(targetId, files);
           }
           e.target.value = '';
+        }}
+      />
+
+      <input
+        ref={stepDocInputRef}
+        type="file"
+        accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        className="hidden"
+        onChange={(e) => {
+          void handleContextMenuStepDocChange(e);
         }}
       />
 
@@ -2494,15 +2704,37 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                 }
                 trees={trees}
                 scopeNodeId={openedRiskScopeId}
+                initialMode={openedRiskPanelMode}
+                modeNonce={openedRiskModeNonce}
+                actionBanner={openedRiskActionBanner}
+                customRubriques={riskCustomRubriques}
+                directionOptions={riskDirectionOptions}
                 onClose={() => {
                   setOpenedRiskInfoId(null);
                   setOpenedRiskScopeId(undefined);
+                  setOpenedRiskActionBanner(null);
                 }}
                 onSelectRiskNode={(riskNodeId) => {
                   setOpenedRiskInfoId(riskNodeId);
+                  setOpenedRiskActionBanner(null);
                   onJumpToNode(riskNodeId);
                 }}
                 onUpdateRiskMeta={onUpdateRiskMeta}
+                onAddRisk={() => handleRiskAddAction(openedRiskInfoNode)}
+                onDeleteRisk={handleRiskDeleteAction}
+                onDuplicateRisk={handleRiskDuplicateAction}
+                onTransferRisk={(riskNodeId, destDirId) => {
+                  if (onTransferRisk?.(riskNodeId, destDirId)) {
+                    setOpenedRiskActionBanner('Risque transféré et rattaché à sa nouvelle destination.');
+                  }
+                }}
+                onAddCustomRubrique={(input) => {
+                  onAddRiskRubrique?.(input);
+                  setOpenedRiskActionBanner(
+                    `Rubrique « ${input.label} » ajoutée au détail de ce risque et à tous les autres risques.`
+                  );
+                }}
+                onSortRisks={onSortRisks}
               />
             )}
 
@@ -2563,7 +2795,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             !openedExportEtat &&
             openedMissionStepNode && (
               <MissionStepTableViewer
-                node={openedMissionStepNode}
+                node={findNodeById(trees, openedMissionStepNode.id) ?? openedMissionStepNode}
                 session={session}
                 refreshKey={sqliteRefreshNonce}
                 flushTop
@@ -3001,17 +3233,24 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
             );
           })()}
 
-          {/* Section Risk management & action Détail du risque */}
+          {/* Section Risk management & actions dynamiques sur le détail du risque */}
           {(() => {
             const ctxNode = contextMenu.node;
             const showRiskMenu =
               !ctxNode ||
               ctxNode.natureId === 'risk-management' ||
               Boolean(ctxNode.riskMeta) ||
+              Boolean(openedRiskInfoNode) ||
               ctxNode.nodeType === 'root' ||
               (ctxNode.nodeType === 'exercice' &&
                 extractRisksFromTrees(trees, ctxNode.id).length > 0);
             if (!showRiskMenu) return null;
+
+            const targetRiskNode = resolveTargetRiskNode(ctxNode);
+            const targetRiskLocked = targetRiskNode
+              ? isNodeLockedOrWithinLockedAncestor(trees, targetRiskNode.id) ||
+                Boolean(targetRiskNode.locked)
+              : false;
 
             return (
               <div className="border-b border-rose-800/60 bg-rose-950/20 py-1">
@@ -3020,7 +3259,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                     Risk management
                   </span>
                   <span className="font-mono text-[10px] text-rose-300/80">
-                    2026 · 23 col.
+                    {23 + riskCustomRubriques.length} col.
                   </span>
                 </div>
 
@@ -3028,13 +3267,148 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                   type="button"
                   role="menuitem"
                   onClick={() => {
-                    openRiskDetailPanel(ctxNode);
+                    openRiskDetailPanel(ctxNode, undefined, 'detail');
                     setContextMenu(null);
                   }}
                   className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
                 >
                   <ShieldAlert className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
                   <span>Détail du risque</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!onAddRisk}
+                  onClick={() => {
+                    handleRiskAddAction(ctxNode);
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:opacity-40 cursor-pointer"
+                >
+                  <Plus className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                  <span>Ajouter risque</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!targetRiskNode || targetRiskLocked || !onDeleteRisk}
+                  onClick={() => {
+                    if (targetRiskNode) handleRiskDeleteAction(targetRiskNode.id);
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-red-300 hover:bg-red-950/60 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-red-400" aria-hidden="true" />
+                  <span>Supprimer risque</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!targetRiskNode || targetRiskLocked || !onDuplicateRisk}
+                  onClick={() => {
+                    if (targetRiskNode) handleRiskDuplicateAction(targetRiskNode.id);
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <CopyPlus className="h-3.5 w-3.5 text-indigo-400" aria-hidden="true" />
+                  <span>Dupliquer risque</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!targetRiskNode || targetRiskLocked}
+                  onClick={() => {
+                    openRiskDetailPanel(
+                      targetRiskNode ?? ctxNode,
+                      undefined,
+                      'transfer',
+                      'Sélectionnez la destination (Cycle / Processus / Direction) pour transférer ce risque.'
+                    );
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5 text-blue-400" aria-hidden="true" />
+                  <span>Transférer risque</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!targetRiskNode || targetRiskLocked}
+                  onClick={() => {
+                    openRiskDetailPanel(
+                      targetRiskNode ?? ctxNode,
+                      undefined,
+                      'edit-all',
+                      'Édition globale activée : modifiez les données du risque puis enregistrez.'
+                    );
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                >
+                  <Pencil className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
+                  <span>Modifier données risque</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={!onAddRiskRubrique}
+                  onClick={() => {
+                    openRiskDetailPanel(
+                      targetRiskNode ?? ctxNode,
+                      undefined,
+                      'add-rubrique',
+                      'Ajoutez une nouvelle rubrique : elle sera visible sur ce risque et tous les autres.'
+                    );
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white disabled:opacity-40 cursor-pointer"
+                >
+                  <Layers className="h-3.5 w-3.5 text-violet-400" aria-hidden="true" />
+                  <span>Ajouter Rubrique</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openRiskDetailPanel(
+                      targetRiskNode ?? ctxNode,
+                      ctxNode?.riskMeta ? undefined : ctxNode?.id,
+                      'filter',
+                      'Filtrez les risques selon vos critères.'
+                    );
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                >
+                  <Search className="h-3.5 w-3.5 text-amber-300" aria-hidden="true" />
+                  <span>Filtrer risque</span>
+                </button>
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    openRiskDetailPanel(
+                      targetRiskNode ?? ctxNode,
+                      ctxNode?.riskMeta ? undefined : ctxNode?.id,
+                      'sort',
+                      'Choisissez le critère et l’ordre de tri des risques.'
+                    );
+                    setContextMenu(null);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                >
+                  <ArrowUp className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                  <span>Trier Risques</span>
                 </button>
               </div>
             );
@@ -3675,19 +4049,48 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                     )}
 
                     {resolveMissionStepClassification(ctxNode).isStep && (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        disabled={nodeEffectivelyLocked}
-                        onClick={() => {
-                          openMissionStepPanel(ctxNode);
-                          setContextMenu(null);
-                        }}
-                        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-emerald-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
-                      >
-                        <Table2 className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-                        <span>Ouvrir étape (Tables liées · Forme de base)</span>
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={nodeEffectivelyLocked}
+                          onClick={() => {
+                            openMissionStepPanel(ctxNode);
+                            setContextMenu(null);
+                          }}
+                          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-emerald-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                        >
+                          <Table2 className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                          <span>Ouvrir étape (Tables liées · Forme de base)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={nodeEffectivelyLocked || isImportingStepDoc}
+                          onClick={() => {
+                            triggerStepDocImportFromMenu(ctxNode);
+                            setContextMenu(null);
+                          }}
+                          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-emerald-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                        >
+                          <FileUp className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                          <span>Importer étape mission (.doc)</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            handleExportStepDocFromMenu(ctxNode);
+                            setContextMenu(null);
+                          }}
+                          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-rose-300 hover:bg-slate-800 hover:text-white cursor-pointer"
+                        >
+                          <FileDown className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                          <span>Exporter étape mission (.doc)</span>
+                        </button>
+                      </>
                     )}
 
                     {onShareNode && (

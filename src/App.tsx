@@ -30,7 +30,14 @@ import {
   buildInitialSuiviRecosWordBodies,
   updateRecoMetaInTree,
 } from './data/suiviRecosSimulation';
-import { updateRiskMetaInTree } from './data/riskManagementData';
+import {
+  addBlankRiskInTree,
+  deleteRiskInTree,
+  duplicateRiskInTree,
+  sortRisksInTrees,
+  transferRiskInTree,
+  updateRiskMetaInTree,
+} from './data/riskManagementData';
 import {
   FeuilleCouvertureDocument,
   generateCollectionDataJson,
@@ -49,7 +56,10 @@ import {
   ClientSessionConfig,
   MissionTodoTask,
   RecoSourceMetadata,
+  RiskCustomRubrique,
   RiskManagementMetadata,
+  RiskSortDirection,
+  RiskSortField,
   WorkflowNatureId,
   WorkflowNodeStatus,
   WorkflowTreeNode,
@@ -135,6 +145,7 @@ import {
 import {
   appendMessageToSqliteChat,
   getStepTablesFromSqlite,
+  hydrateClientSqliteFromServer,
   loadEAuditSqliteDb,
   tablesToMarkdown,
   updateStepTablesInSqlite,
@@ -167,6 +178,29 @@ interface HistorySnapshot {
   trees: WorkflowTreeNode[];
   wordBodies: Record<string, string>;
   label: string;
+}
+
+function markNodesWithSqliteData(
+  nodes: WorkflowTreeNode[],
+  nodeIds: Set<string>
+): WorkflowTreeNode[] {
+  let changed = false;
+  const next = nodes.map((n) => {
+    let updated = n;
+    if (nodeIds.has(n.id) && n.sqliteHasData !== true) {
+      updated = { ...updated, sqliteHasData: true };
+      changed = true;
+    }
+    if (updated.children && updated.children.length > 0) {
+      const nextChildren = markNodesWithSqliteData(updated.children, nodeIds);
+      if (nextChildren !== updated.children) {
+        updated = { ...updated, children: nextChildren };
+        changed = true;
+      }
+    }
+    return updated;
+  });
+  return changed ? next : nodes;
 }
 
 export default function App() {
@@ -248,6 +282,7 @@ export default function App() {
   } | null>(null);
   const [undoStack, setUndoStack] = useState<HistorySnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<HistorySnapshot[]>([]);
+  const [riskCustomRubriques, setRiskCustomRubriques] = useState<RiskCustomRubrique[]>([]);
 
   // Collaboration sans compte (Partage par URL)
   const [guestShareToken, setGuestShareToken] = useState<string | null>(() => {
@@ -257,6 +292,21 @@ export default function App() {
   const [shareModalRoom, setShareModalRoom] = useState<SharedWorkspaceRoom | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sqliteRefreshNonce, setSqliteRefreshNonce] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void hydrateClientSqliteFromServer(session).then((hydratedIds) => {
+      if (cancelled || hydratedIds.length === 0) return;
+      const idSet = new Set(hydratedIds);
+      setWorkflowTrees((prev) => markNodesWithSqliteData(prev, idSet));
+      setSqliteRefreshNonce((n) => n + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Hydrate persisted SQLite mission steps from aionui.db on startup
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const chatContainerRef = useRef<HTMLDivElement | null>(null);
   const highlightTimeoutRef = useRef<number | null>(null);
@@ -1826,6 +1876,151 @@ export default function App() {
     [session.userSignature, pushUndoSnapshot, flashStatus]
   );
 
+  const handleAddRisk = useCallback(
+    (targetNodeId?: string): string | null => {
+      const result = addBlankRiskInTree(
+        workflowTrees,
+        targetNodeId,
+        session.userSignature
+      );
+      if (!result.createdNodeId) return null;
+      pushUndoSnapshot('Ajout risque (fiche vierge)');
+      setWorkflowTrees(result.trees);
+      const path = findNodePath(result.trees, result.createdNodeId) || [];
+      setWfExpandedIds((prev) => {
+        const next = new Set(prev);
+        path.forEach((p) => next.add(p.id));
+        return next;
+      });
+      setHighlightedNodeId(result.createdNodeId);
+      flashStatus('Nouveau risque ajouté (page de détail vierge créée).');
+      return result.createdNodeId;
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleDeleteRisk = useCallback(
+    (riskNodeId: string): string | null => {
+      const result = deleteRiskInTree(workflowTrees, riskNodeId);
+      if (!result.deletedLabel) return result.nextRiskNodeId;
+      pushUndoSnapshot('Suppression risque');
+      setWorkflowTrees(result.trees);
+      if (result.nextRiskNodeId) {
+        const path = findNodePath(result.trees, result.nextRiskNodeId) || [];
+        setWfExpandedIds((prev) => {
+          const next = new Set(prev);
+          path.forEach((p) => next.add(p.id));
+          return next;
+        });
+        setHighlightedNodeId(result.nextRiskNodeId);
+      }
+      flashStatus(
+        `Risque supprimé (« ${result.deletedLabel} »)${
+          result.nextRiskNodeId ? ' — redirection vers le risque suivant.' : '.'
+        }`
+      );
+      return result.nextRiskNodeId;
+    },
+    [workflowTrees, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleDuplicateRisk = useCallback(
+    (riskNodeId: string): string | null => {
+      const result = duplicateRiskInTree(
+        workflowTrees,
+        riskNodeId,
+        session.userSignature
+      );
+      if (!result.duplicatedNodeId) return null;
+      pushUndoSnapshot('Duplication risque');
+      setWorkflowTrees(result.trees);
+      const path = findNodePath(result.trees, result.duplicatedNodeId) || [];
+      setWfExpandedIds((prev) => {
+        const next = new Set(prev);
+        path.forEach((p) => next.add(p.id));
+        return next;
+      });
+      setHighlightedNodeId(result.duplicatedNodeId);
+      flashStatus('Risque dupliqué dans la cartographie.');
+      return result.duplicatedNodeId;
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleTransferRisk = useCallback(
+    (riskNodeId: string, destinationDirectionNodeId: string): boolean => {
+      const result = transferRiskInTree(
+        workflowTrees,
+        riskNodeId,
+        destinationDirectionNodeId,
+        session.userSignature
+      );
+      if (!result.transferred) return false;
+      pushUndoSnapshot('Transfert risque');
+      setWorkflowTrees(result.trees);
+      const path = findNodePath(result.trees, riskNodeId) || [];
+      setWfExpandedIds((prev) => {
+        const next = new Set(prev);
+        path.forEach((p) => next.add(p.id));
+        return next;
+      });
+      setHighlightedNodeId(riskNodeId);
+      flashStatus('Risque transféré vers la destination sélectionnée.');
+      return true;
+    },
+    [workflowTrees, session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleAddRiskRubrique = useCallback(
+    (input: {
+      label: string;
+      multiline?: boolean;
+      initialValueForCurrent?: string;
+      riskNodeId: string;
+    }) => {
+      const cleanLabel = input.label.trim();
+      if (!cleanLabel) return;
+      const slug = cleanLabel
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 32);
+      const key = `${slug || 'rubrique'}_${Date.now().toString(36)}`;
+      const newRubrique: RiskCustomRubrique = {
+        id: `rm-rub-${Date.now().toString(36)}`,
+        key,
+        label: cleanLabel,
+        header: cleanLabel,
+        multiline: input.multiline,
+      };
+      setRiskCustomRubriques((prev) => [...prev, newRubrique]);
+      if (input.initialValueForCurrent && input.riskNodeId) {
+        pushUndoSnapshot('Ajout rubrique globale Risk management');
+        setWorkflowTrees((prev) =>
+          updateRiskMetaInTree(
+            prev,
+            input.riskNodeId,
+            { customFields: { [key]: input.initialValueForCurrent! } },
+            session.userSignature
+          )
+        );
+      }
+      flashStatus(`Rubrique « ${cleanLabel} » ajoutée à l’ensemble des risques.`);
+    },
+    [session.userSignature, pushUndoSnapshot, flashStatus]
+  );
+
+  const handleSortRisks = useCallback(
+    (field: RiskSortField, direction: RiskSortDirection, scopeNodeId?: string) => {
+      pushUndoSnapshot(`Tri des risques (${field})`);
+      setWorkflowTrees((prev) => sortRisksInTrees(prev, field, direction, scopeNodeId));
+      flashStatus(`Risques triés dans l’arborescence (${field} · ${direction}).`);
+    },
+    [pushUndoSnapshot, flashStatus]
+  );
+
   const handleInitClient = useCallback(() => {
     setSession(INITIAL_CLIENT_SESSION);
     setWorkflowTrees(createInitialWorkflowTrees());
@@ -2839,6 +3034,12 @@ export default function App() {
         }
         onSqliteSynced={(detail, stepNode, nextTables) => {
           flashStatus(detail);
+          if (stepNode) {
+            setWorkflowTrees((prev) =>
+              markNodesWithSqliteData(prev, new Set([stepNode.id]))
+            );
+            setSqliteRefreshNonce((n) => n + 1);
+          }
           if (stepNode && nextTables) {
             void fetchOwnerShareRooms(session.email).then((rooms) => {
               rooms.forEach((r) => {
@@ -2907,6 +3108,13 @@ export default function App() {
         onUpdatePlanMissionMeta={handleUpdatePlanMissionMeta}
         onUpdateRecoMeta={handleUpdateRecoMeta}
         onUpdateRiskMeta={handleUpdateRiskMeta}
+        riskCustomRubriques={riskCustomRubriques}
+        onAddRisk={handleAddRisk}
+        onDeleteRisk={handleDeleteRisk}
+        onDuplicateRisk={handleDuplicateRisk}
+        onTransferRisk={handleTransferRisk}
+        onAddRiskRubrique={handleAddRiskRubrique}
+        onSortRisks={handleSortRisks}
         onOpenAuditPlanTab={() => {
           setActiveTab('audit-plan');
           setIsRightMenuOpen(false);

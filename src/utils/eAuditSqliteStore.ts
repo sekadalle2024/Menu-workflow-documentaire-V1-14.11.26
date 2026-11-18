@@ -634,7 +634,195 @@ export function updateStepTablesInSqlite(
   });
 
   saveEAuditSqliteDb(db);
+
+  // Synchroniser en arrière-plan vers la base SQLite serveur (aionui.db)
+  if (typeof window !== 'undefined' && typeof fetch === 'function') {
+    void fetch(`/api/mission-steps/sqlite/${encodeURIComponent(node.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        stepLabel: node.label,
+        conversationId: updatedRow.conversation_id,
+        messageId: updatedRow.id,
+        tables,
+        updatedBy: userId,
+        action: actionDetail,
+      }),
+    }).catch(() => {
+      // ignore offline error; local SQLite v17 remains persisted
+    });
+  }
+
   return { db, messageRow: updatedRow };
+}
+
+export interface DocMissionStepImportResult {
+  tables: ParsedBaseTable[];
+  parserEngine: string;
+  detectedFormat: string;
+  warnings: string[];
+  messageRow: SqliteMessageRow;
+}
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : '';
+      const base64 = result.includes(',') ? result.split(',').pop() || '' : result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error('Impossible de lire le fichier .doc sélectionné.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Importe une étape de mission (2 à 10 tables à colonnes variables) depuis un fichier .doc/.docx,
+ * écrase les données par défaut de l'étape et persiste dans la base SQLite (client v17 + serveur aionui.db).
+ */
+export async function importMissionStepFromDocFile(
+  file: File,
+  node: WorkflowTreeNode,
+  clientName = 'Banque Atlantique UMOA',
+  userId = 'user_admin_oha'
+): Promise<DocMissionStepImportResult> {
+  const fileBase64 = await readFileAsBase64(file);
+  const msgId = node.sqliteMessageId || `msg_${node.id.replace(/^(user|team)-/, '')}`;
+  const convId = node.sqliteConversationId || 'conv_tres_2026_mission';
+
+  const res = await fetch('/api/mission-steps/import-doc', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileName: file.name,
+      fileBase64,
+      nodeId: node.id,
+      stepLabel: node.label,
+      conversationId: convId,
+      messageId: msgId,
+      updatedBy: userId,
+    }),
+  });
+
+  const payload = (await res.json()) as {
+    error?: string;
+    tables?: ParsedBaseTable[];
+    parserEngine?: string;
+    detectedFormat?: string;
+    warnings?: string[];
+  };
+
+  if (!res.ok || !Array.isArray(payload.tables) || payload.tables.length === 0) {
+    throw new Error(
+      payload.error ||
+        `Impossible d'extraire des tableaux depuis « ${file.name} ».`
+    );
+  }
+
+  const normalizedTables = normalizeWorkflowBaseTables(payload.tables);
+  const { messageRow } = updateStepTablesInSqlite(
+    node,
+    normalizedTables,
+    userId,
+    `Import étape .doc (${file.name} · ${normalizedTables.length} table(s))`,
+    clientName
+  );
+
+  return {
+    tables: normalizedTables,
+    parserEngine: payload.parserEngine || 'doc-parser',
+    detectedFormat: payload.detectedFormat || 'doc',
+    warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
+    messageRow,
+  };
+}
+
+/**
+ * Hydrate la base SQLite client (aionui.db v17) avec les étapes importées/sauvegardées sur le serveur SQLite.
+ * Garantit la persistance complète même après actualisation ou réouverture du navigateur.
+ */
+export async function hydrateClientSqliteFromServer(
+  session?: ClientSessionConfig
+): Promise<string[]> {
+  if (typeof window === 'undefined' || typeof fetch !== 'function') return [];
+  try {
+    const res = await fetch('/api/mission-steps/sqlite');
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      records?: Array<{
+        nodeId: string;
+        stepLabel: string;
+        conversationId: string;
+        messageId: string;
+        tables: ParsedBaseTable[];
+        markdown: string;
+        sourceFile?: string | null;
+        updatedAt: number;
+      }>;
+    };
+    const records = data.records || [];
+    if (records.length === 0) return [];
+
+    const db = loadEAuditSqliteDb(session);
+    const hydratedNodeIds: string[] = [];
+
+    for (const rec of records) {
+      if (!rec.nodeId || !Array.isArray(rec.tables) || rec.tables.length === 0) continue;
+      hydratedNodeIds.push(rec.nodeId);
+
+      const convId = rec.conversationId || 'conv_tres_2026_mission';
+      const msgId = rec.messageId || `msg_${rec.nodeId.replace(/^(user|team)-/, '')}`;
+      const md = rec.markdown || tablesToMarkdown(rec.tables);
+      const contentPayload: SqliteMessageContentPayload = {
+        content: md,
+        type: 'text',
+        n8nData: {
+          workflowId: convId,
+          executionId: `exec_sqlite_${rec.updatedAt}`,
+          nodeId: rec.nodeId,
+        },
+      };
+
+      const existingIdx = db.messages.findIndex((m) => m.id === msgId);
+      const row: SqliteMessageRow = {
+        id: msgId,
+        conversation_id: convId,
+        msg_id: msgId,
+        type: 'text',
+        content: JSON.stringify(contentPayload),
+        position: 'left',
+        status: 'finish',
+        created_at: rec.updatedAt || Date.now(),
+      };
+      if (existingIdx >= 0) {
+        db.messages[existingIdx] = row;
+      } else {
+        db.messages.push(row);
+      }
+
+      if (!db.conversations.some((c) => c.id === convId)) {
+        db.conversations.push({
+          id: convId,
+          user_id: 'user_admin_oha',
+          name: `Workflow Mission — ${convId}`,
+          type: 'n8n',
+          extra: JSON.stringify({ client: session?.client || 'Banque Atlantique UMOA' }),
+          model: null,
+          status: 'finished',
+          source: 'aionui',
+          channel_chat_id: 'user:user_admin_oha',
+          created_at: rec.updatedAt || Date.now(),
+          updated_at: rec.updatedAt || Date.now(),
+        });
+      }
+    }
+
+    saveEAuditSqliteDb(db);
+    return hydratedNodeIds;
+  } catch {
+    return [];
+  }
 }
 
 /** Ajoute un message avec table(s) envoyé depuis une étape ou le chat dans SQLite v17 */

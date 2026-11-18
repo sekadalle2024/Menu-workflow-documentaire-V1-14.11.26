@@ -5,6 +5,9 @@ import {
   Check,
   Copy,
   Eraser,
+  FileDown,
+  FileUp,
+  Loader2,
   Lock,
   MessageSquarePlus,
   MoreVertical,
@@ -24,11 +27,13 @@ import {
 import { ClientSessionConfig, WorkflowTreeNode } from '../types/workflow';
 import {
   getStepTablesFromSqlite,
+  importMissionStepFromDocFile,
   loadEAuditSqliteDb,
   SqliteMessageRow,
   tablesToMarkdown,
   updateStepTablesInSqlite,
 } from '../utils/eAuditSqliteStore';
+import { exportMissionStepToDoc } from '../utils/missionStepDocExporter';
 
 interface MissionStepTableViewerProps {
   node: WorkflowTreeNode;
@@ -87,6 +92,8 @@ export const MissionStepTableViewer: React.FC<MissionStepTableViewerProps> = ({
     cIdx: number;
   } | null>(null);
   const [lastSyncNote, setLastSyncNote] = useState<string | null>(null);
+  const [importingDoc, setImportingDoc] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   const prevNodeIdRef = useRef<string | null>(null);
   const editingCellRef = useRef(editingCell);
@@ -94,6 +101,7 @@ export const MissionStepTableViewer: React.FC<MissionStepTableViewerProps> = ({
   const tablesRef = useRef(tables);
   tablesRef.current = tables;
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
+  const docInputRef = useRef<HTMLInputElement | null>(null);
 
   const formatPayload = useMemo(
     () => buildFormatageDataForNode(node, session.client, '2026'),
@@ -112,6 +120,7 @@ export const MissionStepTableViewer: React.FC<MissionStepTableViewerProps> = ({
       setSelectedCell(null);
       setRowMenu(null);
       setLastSyncNote(null);
+      setImportError(null);
     }
 
     if (externalTables) {
@@ -312,6 +321,74 @@ export const MissionStepTableViewer: React.FC<MissionStepTableViewerProps> = ({
     persistTables(fresh, `Réinitialisation modèle [Formatage data] (${formatPayload.reference})`);
   };
 
+  const triggerDocImportPicker = () => {
+    if (isLocked || importingDoc) return;
+    setRowMenu(null);
+    setImportError(null);
+    docInputRef.current?.click();
+  };
+
+  const handleDocFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || isLocked) return;
+
+    setImportingDoc(true);
+    setImportError(null);
+    try {
+      const result = await importMissionStepFromDocFile(
+        file,
+        node,
+        session.client,
+        'user_admin_oha'
+      );
+      setEditingCell(null);
+      setSelectedCell(null);
+      setTables(result.tables);
+      setSqliteRow(result.messageRow);
+      setLastSyncNote(
+        `Importé : ${file.name} (${result.tables.length} tables · SQLite)`
+      );
+      if (onExternalTablesChange) {
+        onExternalTablesChange(
+          result.tables,
+          `Import .doc (${file.name} · ${result.tables.length} tables)`
+        );
+      }
+      onSqliteSynced?.(
+        `Étape « ${node.label} » importée depuis « ${file.name} » (${result.tables.length} table(s)) et enregistrée dans SQLite`,
+        node,
+        result.tables
+      );
+    } catch (err) {
+      setImportError(
+        err instanceof Error
+          ? err.message
+          : `Erreur lors de l'import du fichier « ${file.name} ».`
+      );
+    } finally {
+      setImportingDoc(false);
+    }
+  };
+
+  const handleExportStepToDoc = () => {
+    setImportError(null);
+    try {
+      const result = exportMissionStepToDoc({
+        node,
+        tables,
+        session,
+      });
+      setLastSyncNote(`Exporté : ${result.filename}`);
+    } catch (err) {
+      setImportError(
+        err instanceof Error
+          ? err.message
+          : "Impossible d'exporter cette étape de mission en .doc."
+      );
+    }
+  };
+
   const accentBarClass =
     formatPayload.formatType === 2
       ? 'bg-emerald-800'
@@ -381,6 +458,39 @@ export const MissionStepTableViewer: React.FC<MissionStepTableViewerProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+            <input
+              ref={docInputRef}
+              type="file"
+              accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              className="hidden"
+              onChange={(e) => void handleDocFileChange(e)}
+            />
+            {!isLocked && (
+              <button
+                type="button"
+                disabled={importingDoc}
+                onClick={triggerDocImportPicker}
+                title="Importer les tables (2 à 10 tableaux) depuis un fichier .doc et écraser les données par défaut"
+                className="inline-flex items-center gap-1 rounded bg-sky-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-sky-500 disabled:opacity-60 cursor-pointer"
+              >
+                {importingDoc ? (
+                  <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                ) : (
+                  <FileUp className="h-3 w-3" aria-hidden="true" />
+                )}
+                <span>{importingDoc ? 'Import .doc...' : 'Importer étape mission'}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={tables.length === 0}
+              onClick={handleExportStepToDoc}
+              title="Exporter l'étape de mission au format Word (.doc) selon la charte graphique E-audit"
+              className="inline-flex items-center gap-1 rounded border border-red-400/40 bg-[#8B0000] px-2.5 py-1 text-[11px] font-semibold text-white transition-colors hover:bg-[#a10d0d] disabled:opacity-50 cursor-pointer"
+            >
+              <FileDown className="h-3 w-3" aria-hidden="true" />
+              <span>Exporter étape mission</span>
+            </button>
             {!isLocked && (
               <button
                 type="button"
@@ -470,6 +580,19 @@ export const MissionStepTableViewer: React.FC<MissionStepTableViewerProps> = ({
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {importError && (
+          <div className="flex items-center justify-between gap-2 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-800">
+            <span>{importError}</span>
+            <button
+              type="button"
+              onClick={() => setImportError(null)}
+              className="rounded px-1.5 py-0.5 text-[11px] font-medium text-red-700 hover:bg-red-100 cursor-pointer"
+            >
+              Fermer
+            </button>
           </div>
         )}
 
@@ -875,11 +998,49 @@ export const MissionStepTableViewer: React.FC<MissionStepTableViewerProps> = ({
                 <button
                   type="button"
                   role="menuitem"
+                  onClick={triggerDocImportPicker}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sky-300 hover:bg-slate-800 cursor-pointer"
+                >
+                  <FileUp className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                  <span>Importer étape mission (.doc)</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setRowMenu(null);
+                    handleExportStepToDoc();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-rose-300 hover:bg-slate-800 cursor-pointer"
+                >
+                  <FileDown className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                  <span>Exporter étape mission (.doc)</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
                   onClick={handleResetStepToDefault}
                   className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-slate-300 hover:bg-slate-800 cursor-pointer"
                 >
                   <RotateCcw className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                   <span>Réinitialiser le modèle</span>
+                </button>
+              </>
+            )}
+            {isLocked && (
+              <>
+                <div className="my-1 border-t border-slate-800" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setRowMenu(null);
+                    handleExportStepToDoc();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-rose-300 hover:bg-slate-800 cursor-pointer"
+                >
+                  <FileDown className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                  <span>Exporter étape mission (.doc)</span>
                 </button>
               </>
             )}

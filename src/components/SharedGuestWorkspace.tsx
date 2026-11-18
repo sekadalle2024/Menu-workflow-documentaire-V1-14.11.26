@@ -9,8 +9,10 @@ import {
   Copy,
   Download,
   Eye,
+  FileDown,
   FilePlus2,
   FileText,
+  FileUp,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -42,7 +44,13 @@ import {
   WorkflowNodeStatus,
   WorkflowTreeNode,
 } from '../types/workflow';
-import { tablesToMarkdown } from '../utils/eAuditSqliteStore';
+import {
+  getStepTablesFromSqlite,
+  importMissionStepFromDocFile,
+  loadEAuditSqliteDb,
+  tablesToMarkdown,
+} from '../utils/eAuditSqliteStore';
+import { exportMissionStepToDoc } from '../utils/missionStepDocExporter';
 import {
   filterMissionTreeForStepAndPhases,
   filterNodeByAllowedPhases,
@@ -175,6 +183,8 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
   const isPatchingRef = useRef(false);
   const fileUploadInputRef = useRef<HTMLInputElement | null>(null);
   const importTargetIdRef = useRef<string | null>(null);
+  const stepDocUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const stepDocTargetNodeRef = useRef<WorkflowTreeNode | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const recoContextMenuRef = useRef<HTMLDivElement | null>(null);
   const knownFolderIdsRef = useRef<Set<string>>(new Set());
@@ -517,6 +527,64 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
       }
     } finally {
       isPatchingRef.current = false;
+    }
+  };
+
+  const handleGuestStepDocUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    const targetNode = stepDocTargetNodeRef.current;
+    e.target.value = '';
+    if (!file || !targetNode || !room || !room.allowEdit) return;
+    const actor = guestActor.trim() || 'Collaborateur invité';
+    try {
+      const result = await importMissionStepFromDocFile(
+        file,
+        targetNode,
+        room.clientName,
+        actor
+      );
+      await handleGuestStepTablesChange(
+        targetNode,
+        result.tables,
+        `Import .doc (${file.name} · ${result.tables.length} tables)`
+      );
+      setSelectedNodeId(targetNode.id);
+    } catch (err) {
+      setErrorBanner(
+        err instanceof Error
+          ? err.message
+          : `Impossible d'importer le fichier « ${file.name} ».`
+      );
+    }
+  };
+
+  const handleExportGuestStepToDoc = (targetNode: WorkflowTreeNode) => {
+    if (!room) return;
+    try {
+      const explicitTables = room.tablesByNodeId?.[targetNode.id];
+      const tables = explicitTables && explicitTables.length > 0
+        ? normalizeWorkflowBaseTables(explicitTables)
+        : normalizeWorkflowBaseTables(
+            getStepTablesFromSqlite(
+              loadEAuditSqliteDb(guestSession),
+              targetNode,
+              guestSession.client
+            ).tables
+          );
+      const res = exportMissionStepToDoc({
+        node: targetNode,
+        tables,
+        session: guestSession,
+      });
+      showToast(`Export .doc généré : ${res.filename}`);
+    } catch (err) {
+      setErrorBanner(
+        err instanceof Error
+          ? err.message
+          : "Impossible d'exporter cette étape de mission en .doc."
+      );
     }
   };
 
@@ -1380,6 +1448,15 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
 
   return (
     <div className="flex h-screen flex-col bg-slate-950 text-slate-100">
+      <input
+        ref={stepDocUploadInputRef}
+        type="file"
+        accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        className="hidden"
+        onChange={(e) => {
+          void handleGuestStepDocUpload(e);
+        }}
+      />
       {/* Bandeau supérieur uniquement lorsque la TreeView latérale est masquée ou pour Suivi des Recos */}
       {!isSplitViewActive && (
         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-4 py-2 text-xs">
@@ -2227,6 +2304,40 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
                 <Eye className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
                 <span>Ouvrir / Afficher à gauche</span>
               </button>
+
+              {isStep &&
+                room.allowEdit &&
+                (inAuthorizedPhase || isSharedPrimaryStep) &&
+                !ctxNode.locked && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      stepDocTargetNodeRef.current = ctxNode;
+                      setContextMenu(null);
+                      stepDocUploadInputRef.current?.click();
+                    }}
+                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-emerald-200 hover:bg-emerald-950/60 cursor-pointer"
+                  >
+                    <FileUp className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                    <span>Importer étape mission (.doc)</span>
+                  </button>
+                )}
+
+              {isStep && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setContextMenu(null);
+                    handleExportGuestStepToDoc(ctxNode);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-rose-200 hover:bg-rose-950/50 cursor-pointer"
+                >
+                  <FileDown className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                  <span>Exporter étape mission (.doc)</span>
+                </button>
+              )}
 
               {canCreateInside && (
                 <>

@@ -3,6 +3,12 @@ import path from 'node:path';
 import express from 'express';
 import type { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
+import { parseDocFileToMissionTables } from './server/docMissionStepParser';
+import {
+  listPersistedStepTablesFromServerSqlite,
+  saveStepTablesToServerSqlite,
+} from './server/sqliteMissionStore';
+import type { ParsedBaseTable } from './src/data/missionStepsFormatData';
 
 interface ShareChangeLogEntry {
   id: string;
@@ -82,10 +88,112 @@ async function startServer() {
   const PORT = Number(process.env.PORT) || 3000;
   const shareRooms = loadSharesFromDisk();
 
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({ limit: '25mb' }));
 
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ ok: true, sharesCount: shareRooms.size });
+  });
+
+  app.get('/api/mission-steps/sqlite', (_req: Request, res: Response) => {
+    try {
+      const records = listPersistedStepTablesFromServerSqlite();
+      res.json({ records });
+    } catch (err) {
+      console.error('[sqlite] Failed to read mission steps:', err);
+      res.status(500).json({ error: 'Erreur lecture base SQLite aionui.db' });
+    }
+  });
+
+  app.put('/api/mission-steps/sqlite/:nodeId', (req: Request, res: Response) => {
+    const nodeId = decodeURIComponent(String(req.params.nodeId || ''));
+    const body = req.body as {
+      stepLabel?: string;
+      conversationId?: string;
+      messageId?: string;
+      tables?: ParsedBaseTable[];
+      sourceFile?: string | null;
+      parserEngine?: string | null;
+      updatedBy?: string;
+      action?: string;
+    };
+    if (!nodeId || !Array.isArray(body?.tables)) {
+      res.status(400).json({ error: 'Paramètres invalides pour sauvegarde SQLite' });
+      return;
+    }
+    try {
+      const record = saveStepTablesToServerSqlite({
+        nodeId,
+        stepLabel: body.stepLabel || nodeId,
+        conversationId: body.conversationId,
+        messageId: body.messageId,
+        tables: body.tables,
+        sourceFile: body.sourceFile,
+        parserEngine: body.parserEngine,
+        updatedBy: body.updatedBy,
+        action: body.action || 'update_mission_step_tables',
+      });
+      res.json({ record });
+    } catch (err) {
+      console.error('[sqlite] Failed to save mission step:', err);
+      res.status(500).json({ error: 'Erreur sauvegarde base SQLite aionui.db' });
+    }
+  });
+
+  app.post('/api/mission-steps/import-doc', async (req: Request, res: Response) => {
+    const body = req.body as {
+      fileName?: string;
+      fileBase64?: string;
+      nodeId?: string;
+      stepLabel?: string;
+      conversationId?: string;
+      messageId?: string;
+      updatedBy?: string;
+    };
+
+    if (!body?.fileName || !body?.fileBase64 || !body?.nodeId) {
+      res.status(400).json({
+        error: 'Fichier .doc, nom du fichier et identifiant étape requis.',
+      });
+      return;
+    }
+
+    try {
+      const cleanBase64 = body.fileBase64.includes(',')
+        ? body.fileBase64.split(',').pop() || ''
+        : body.fileBase64;
+      const buffer = Buffer.from(cleanBase64, 'base64');
+      if (buffer.length === 0) {
+        res.status(400).json({ error: 'Le fichier importé est vide.' });
+        return;
+      }
+
+      const parsed = await parseDocFileToMissionTables(buffer, body.fileName);
+      const record = saveStepTablesToServerSqlite({
+        nodeId: body.nodeId,
+        stepLabel: body.stepLabel || body.nodeId,
+        conversationId: body.conversationId,
+        messageId: body.messageId,
+        tables: parsed.tables,
+        sourceFile: body.fileName,
+        parserEngine: parsed.parserEngine,
+        updatedBy: body.updatedBy || 'user_admin_oha',
+        action: 'import_mission_step_doc',
+      });
+
+      res.json({
+        tables: parsed.tables,
+        parserEngine: parsed.parserEngine,
+        detectedFormat: parsed.detectedFormat,
+        warnings: parsed.warnings,
+        record,
+      });
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Impossible de lire les tables du fichier .doc.';
+      res.status(422).json({ error: msg });
+    }
   });
 
   app.get('/api/shares', (req: Request, res: Response) => {

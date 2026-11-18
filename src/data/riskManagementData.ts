@@ -1,5 +1,10 @@
-import { RiskManagementMetadata, WorkflowTreeNode } from '../types/workflow';
-import { findNodeById } from '../utils/workflowTreeOps';
+import {
+  RiskManagementMetadata,
+  RiskSortDirection,
+  RiskSortField,
+  WorkflowTreeNode,
+} from '../types/workflow';
+import { findNodeById, findNodePath } from '../utils/workflowTreeOps';
 
 export interface RiskManagementColumnSpec {
   key: keyof RiskManagementMetadata;
@@ -467,7 +472,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Compensation chèques SICA-UEMOA",
     "direction": "DOP",
     "operationnel": "Resp. Compensation",
-    "refRisque": "Risk-DCOM-05-2025",
+    "refRisque": "Risk-DOP-01-2025",
     "risque": "Paiement de chèques faux, falsifiés ou hors provision (SICA)",
     "probabilite": "Élevé",
     "impact": "Élevé",
@@ -492,7 +497,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Incidents paiement et CIP-UEMOA",
     "direction": "DOP",
     "operationnel": "Resp. Moyens de Paiement",
-    "refRisque": "Risk-DCOM-06-2025",
+    "refRisque": "Risk-DOP-02-2025",
     "risque": "Déclaration tardive ou erronée des incidents au CIP-UEMOA",
     "probabilite": "Moyen",
     "impact": "Moyen",
@@ -517,7 +522,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Virements RTGS (STAR-UEMOA)",
     "direction": "DOP",
     "operationnel": "Resp. Virements",
-    "refRisque": "Risk-DCOM-07-2025",
+    "refRisque": "Risk-DOP-03-2025",
     "risque": "Exécution de virements erronés, doublonnés ou frauduleux",
     "probabilite": "Moyen",
     "impact": "Élevé",
@@ -542,7 +547,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Virements SWIFT et contrôle des changes",
     "direction": "DOP",
     "operationnel": "Resp. Opérations Internationales",
-    "refRisque": "Risk-DCOM-08-2025",
+    "refRisque": "Risk-DOP-04-2025",
     "risque": "Infraction au Règlement 09/2010/CM/UEMOA des changes",
     "probabilite": "Élevé",
     "impact": "Élevé",
@@ -567,7 +572,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Cartes bancaires (GIM-UEMOA / Visa)",
     "direction": "DOP",
     "operationnel": "Responsable Monétique",
-    "refRisque": "Risk-DCOM-09-2025",
+    "refRisque": "Risk-DOP-05-2025",
     "risque": "Fraude à la carte, clonage ou vol de codes PIN non sécurisés",
     "probabilite": "Moyen",
     "impact": "Élevé",
@@ -592,7 +597,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Mobile Money et Bank-to-Wallet",
     "direction": "DCOM",
     "operationnel": "Chef Produit Digital",
-    "refRisque": "Risk-DCOM-10-2025",
+    "refRisque": "Risk-DCOM-05-2025",
     "risque": "Écarts de réconciliation avec les opérateurs télécoms (MNO)",
     "probabilite": "Élevé",
     "impact": "Moyen",
@@ -617,7 +622,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Banque digitale et E-banking",
     "direction": "DCOM",
     "operationnel": "Resp. Banque Digitale",
-    "refRisque": "Risk-DCOM-11-2025",
+    "refRisque": "Risk-DCOM-06-2025",
     "risque": "Piratage de comptes clients par phishing ou SIM-swapping",
     "probabilite": "Élevé",
     "impact": "Élevé",
@@ -642,7 +647,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Tarification, TEG et services gratuits",
     "direction": "DCOM",
     "operationnel": "Resp. Marketing & Produits",
-    "refRisque": "Risk-DCOM-12-2025",
+    "refRisque": "Risk-DCOM-07-2025",
     "risque": "Dépassement du seuil d'usure ou facturation de services gratuits",
     "probabilite": "Moyen",
     "impact": "Moyen",
@@ -667,7 +672,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Gestion des réclamations clients",
     "direction": "DCOM",
     "operationnel": "Resp. Qualité & Réclamations",
-    "refRisque": "Risk-DCOM-13-2025",
+    "refRisque": "Risk-DCOM-08-2025",
     "risque": "Traitement tardif ou non-résolution des réclamations clients",
     "probabilite": "Moyen",
     "impact": "Faible",
@@ -692,7 +697,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Démarchage et ventes forcées",
     "direction": "DCOM",
     "operationnel": "Directeur Commercial",
-    "refRisque": "Risk-DCOM-14-2025",
+    "refRisque": "Risk-DCOM-09-2025",
     "risque": "Ventes liées abusives ou défaut de devoir de conseil client",
     "probabilite": "Moyen",
     "impact": "Moyen",
@@ -717,7 +722,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Opérations de guichet espèces",
     "direction": "DOP",
     "operationnel": "Caissier Principal",
-    "refRisque": "Risk-DOP-01-2025",
+    "refRisque": "Risk-DOP-06-2025",
     "risque": "Erreur de saisie, omission d'écriture ou détournement au guichet",
     "probabilite": "Élevé",
     "impact": "Moyen",
@@ -742,7 +747,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Arrêtés et inventaires de caisse",
     "direction": "DOP",
     "operationnel": "Chef d'Agence",
-    "refRisque": "Risk-DOP-02-2025",
+    "refRisque": "Risk-DOP-07-2025",
     "risque": "Absence de comptage contradictoire dissimulant un manquant",
     "probabilite": "Élevé",
     "impact": "Élevé",
@@ -767,7 +772,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Plafonds d'encaisse et coffres",
     "direction": "DOP",
     "operationnel": "Chef d'Agence",
-    "refRisque": "Risk-DOP-03-2025",
+    "refRisque": "Risk-DOP-08-2025",
     "risque": "Dépassement du plafond d'encaisse assuré dans le coffre",
     "probabilite": "Moyen",
     "impact": "Élevé",
@@ -792,7 +797,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Convoyage de fonds (BCEAO/agences)",
     "direction": "DOP",
     "operationnel": "Trésorier Espèces",
-    "refRisque": "Risk-DOP-04-2025",
+    "refRisque": "Risk-DOP-09-2025",
     "risque": "Attaque ou perte de valeurs lors du transport de fonds",
     "probabilite": "Faible",
     "impact": "Élevé",
@@ -817,7 +822,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Alimentation et suivi des GAB/DAB",
     "direction": "DOP",
     "operationnel": "Gestionnaire Monétique",
-    "refRisque": "Risk-DOP-05-2025",
+    "refRisque": "Risk-DOP-10-2025",
     "risque": "Écarts d'encaisse sur GAB ou défaut de réconciliation caissettes",
     "probabilite": "Moyen",
     "impact": "Moyen",
@@ -842,7 +847,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Faux billets et change manuel",
     "direction": "DOP",
     "operationnel": "Caissier Principal",
-    "refRisque": "Risk-DOP-06-2025",
+    "refRisque": "Risk-DOP-11-2025",
     "risque": "Acceptation de faux billets (FCFA/devises) ou change illégal",
     "probabilite": "Moyen",
     "impact": "Moyen",
@@ -867,7 +872,7 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
     "processus": "Coffres-forts clients",
     "direction": "DOP",
     "operationnel": "Chef d'Agence",
-    "refRisque": "Risk-DOP-07-2025",
+    "refRisque": "Risk-DOP-12-2025",
     "risque": "Accès non autorisé à un coffre client ou sinistre",
     "probabilite": "Faible",
     "impact": "Élevé",
@@ -2538,11 +2543,60 @@ export const RISK_MANAGEMENT_2026_DATA: RiskManagementMetadata[] = [
   }
 ];
 
-export function formatRiskNodeTitle(record: Pick<RiskManagementMetadata, 'refRisque' | 'risque'>): string {
-  const ref = record.refRisque.trim();
+export function normalizeDirectionCode(direction?: string): string {
+  const cleaned = (direction || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '');
+  return cleaned || 'GEN';
+}
+
+export function extractIdentificationYear(
+  refRisque?: string,
+  fallbackYear = '2026'
+): string {
+  const match = (refRisque || '').trim().match(/-(\d{4})(?:-|$)/);
+  return match ? match[1] : fallbackYear;
+}
+
+export function formatRiskReference(
+  direction: string,
+  sequenceNumber: number,
+  year = '2026'
+): string {
+  const dir = normalizeDirectionCode(direction);
+  const seq = String(Math.max(1, Math.round(sequenceNumber))).padStart(2, '0');
+  const yr = /^\d{4}$/.test(year.trim()) ? year.trim() : '2026';
+  return `Risk-${dir}-${seq}-${yr}`;
+}
+
+export function formatRiskNodeTitle(
+  record: Pick<RiskManagementMetadata, 'refRisque' | 'risque'> & {
+    no?: number;
+    direction?: string;
+  }
+): string {
+  const explicitRef = record.refRisque.trim();
   const label = record.risque.trim();
-  if (ref && label) return `${ref} · ${label}`;
-  return ref || label || 'Risque sans intitulé';
+  const synthesizedRef =
+    !explicitRef && record.direction?.trim()
+      ? formatRiskReference(record.direction, record.no || 1, '2026')
+      : explicitRef;
+  if (synthesizedRef && label) return `${synthesizedRef} · ${label}`;
+  if (synthesizedRef || label) return synthesizedRef || label;
+  return record.no
+    ? `Nouveau risque #${record.no} (à compléter)`
+    : 'Nouveau risque (à compléter)';
+}
+
+function mapRiskEvaluationToStatus(evalValue: string): WorkflowTreeNode['status'] {
+  const clean = evalValue.trim().toLowerCase();
+  if (!clean) return 'todo';
+  if (clean.includes('critique') || clean.includes('élevé') || clean.includes('eleve')) {
+    return 'in-review';
+  }
+  if (clean.includes('moyen')) return 'in-progress';
+  return 'validated';
 }
 
 function slugifySegment(value: string): string {
@@ -2606,12 +2660,7 @@ export function buildRiskManagement2026Children(prefix: 'user' | 'team'): Workfl
           natureId: 'risk-management',
           signature: DIRECTION_SIGNATURES[risk.direction] || 'OHA',
           owner: risk.operationnel,
-          status:
-            risk.evaluationRisque === 'Élevé'
-              ? 'in-review'
-              : risk.evaluationRisque === 'Moyen'
-              ? 'in-progress'
-              : 'validated',
+          status: mapRiskEvaluationToStatus(risk.evaluationRisque),
           riskMeta: risk,
         }));
 
@@ -2661,8 +2710,18 @@ export interface LiveRiskEntry {
   directionLabel: string;
 }
 
+export interface RiskDirectionDestination {
+  id: string;
+  rootLabel: string;
+  cycle: string;
+  processus: string;
+  direction: string;
+  riskCount: number;
+}
+
 export function findRiskRecordByRefOrLabel(label: string): RiskManagementMetadata | undefined {
   const clean = label.trim().toLowerCase();
+  if (!clean) return undefined;
   return RISK_MANAGEMENT_2026_DATA.find(
     (r) =>
       clean.startsWith(r.refRisque.toLowerCase()) ||
@@ -2744,6 +2803,546 @@ export function extractRisksFromTrees(
   return results;
 }
 
+export function collectDirectionContainersFromTrees(
+  trees: WorkflowTreeNode[]
+): RiskDirectionDestination[] {
+  const destinations: RiskDirectionDestination[] = [];
+  const seen = new Set<string>();
+
+  const walk = (
+    node: WorkflowTreeNode,
+    rootLabel: string,
+    cycle: string,
+    processus: string,
+    inRiskNature: boolean
+  ) => {
+    const isRisk = inRiskNature || node.natureId === 'risk-management';
+    const nextRoot = node.nodeType === 'root' ? node.label : rootLabel;
+    const nextCycle = isRisk && node.nodeType === 'activite' ? node.label : cycle;
+
+    if (isRisk && node.nodeType === 'sous-section') {
+      const isDirection =
+        Boolean(node.id.includes('-rm-dir-')) ||
+        Boolean(node.children?.some((c) => Boolean(c.riskMeta)));
+
+      if (isDirection && !seen.has(node.id)) {
+        seen.add(node.id);
+        destinations.push({
+          id: node.id,
+          rootLabel: nextRoot || 'Workflow',
+          cycle: nextCycle || node.children?.[0]?.riskMeta?.cycle || 'Cycle',
+          processus: processus || node.children?.[0]?.riskMeta?.processus || 'Processus',
+          direction: node.label,
+          riskCount: node.children?.filter((c) => Boolean(c.riskMeta)).length ?? 0,
+        });
+        return;
+      }
+
+      if (node.children?.length) {
+        for (const child of node.children) {
+          walk(child, nextRoot, nextCycle, node.label, isRisk);
+        }
+      }
+      return;
+    }
+
+    if (node.children?.length) {
+      for (const child of node.children) {
+        walk(child, nextRoot, nextCycle, processus, isRisk);
+      }
+    }
+  };
+
+  for (const root of trees) {
+    walk(root, root.label, '', '', false);
+  }
+  return destinations;
+}
+
+export function getNextRiskNumber(trees: WorkflowTreeNode[]): number {
+  const all = extractRisksFromTrees(trees);
+  const maxTreeNo = all.reduce((acc, item) => Math.max(acc, Number(item.record.no) || 0), 0);
+  const maxSeedNo = RISK_MANAGEMENT_2026_DATA.reduce(
+    (acc, item) => Math.max(acc, Number(item.no) || 0),
+    0
+  );
+  return Math.max(maxTreeNo, maxSeedNo) + 1;
+}
+
+export function getNextRiskSequenceForDirection(
+  trees: WorkflowTreeNode[],
+  direction: string
+): number {
+  const dir = normalizeDirectionCode(direction);
+  let maxSeq = 0;
+  const regex = new RegExp(`^Risk-${dir}-(\\d+)(?:-|$)`, 'i');
+
+  for (const item of extractRisksFromTrees(trees)) {
+    const m = item.record.refRisque.trim().match(regex);
+    if (m) {
+      maxSeq = Math.max(maxSeq, Number.parseInt(m[1], 10) || 0);
+    }
+  }
+  for (const row of RISK_MANAGEMENT_2026_DATA) {
+    const m = row.refRisque.trim().match(regex);
+    if (m) {
+      maxSeq = Math.max(maxSeq, Number.parseInt(m[1], 10) || 0);
+    }
+  }
+  return maxSeq + 1;
+}
+
+export function buildFormattedRiskRefForNode(
+  trees: WorkflowTreeNode[],
+  direction: string,
+  existingRef?: string,
+  fallbackYear = '2026'
+): string {
+  const nextSeq = getNextRiskSequenceForDirection(trees, direction);
+  const year = extractIdentificationYear(existingRef, fallbackYear);
+  return formatRiskReference(direction, nextSeq, year);
+}
+
+export function createBlankRiskMetadata(no: number): RiskManagementMetadata {
+  return {
+    no,
+    cycle: '',
+    processus: '',
+    direction: '',
+    operationnel: '',
+    refRisque: '',
+    risque: '',
+    probabilite: '',
+    impact: '',
+    evaluationRisque: '',
+    planAction: '',
+    controleNiveau1: '',
+    controleNiveau2: '',
+    controleNiveau3: '',
+    causes: '',
+    consequences: '',
+    facteursRisque: '',
+    facteurDeclencheur: '',
+    familleBale: '',
+    ligneMetierBale: '',
+    categorieBale: '',
+    sousCategorieBale: '',
+    natureRisque: '',
+    customFields: {},
+  };
+}
+
+function resolveTargetDirectionIdForInsert(
+  trees: WorkflowTreeNode[],
+  targetNodeId?: string
+): { directionId: string | null; afterLeafId?: string } {
+  const destinations = collectDirectionContainersFromTrees(trees);
+  if (destinations.length === 0) return { directionId: null };
+
+  if (!targetNodeId) {
+    return { directionId: destinations[0].id };
+  }
+
+  const targetNode = findNodeById(trees, targetNodeId);
+  if (!targetNode) return { directionId: destinations[0].id };
+
+  const path = findNodePath(trees, targetNodeId) || [];
+
+  // Si on est sur un risque feuille, insérer dans sa Direction parente juste après ce risque
+  if (targetNode.riskMeta || (targetNode.nodeType === 'document' && targetNode.natureId === 'risk-management')) {
+    const parentDir = [...path]
+      .reverse()
+      .find((n) => n.id !== targetNode.id && destinations.some((d) => d.id === n.id));
+    if (parentDir) {
+      return { directionId: parentDir.id, afterLeafId: targetNode.id };
+    }
+  }
+
+  // Si on est sur une Direction directement
+  if (destinations.some((d) => d.id === targetNode.id)) {
+    return { directionId: targetNode.id };
+  }
+
+  // Si on est sur un Cycle, Processus, Travaux ou Workflow Risk management -> prendre la première Direction dessous
+  const firstChildRisk = extractRisksFromTrees(trees, targetNode.id)[0];
+  if (firstChildRisk) {
+    const leafPath = findNodePath(trees, firstChildRisk.node.id) || [];
+    const parentDir = [...leafPath]
+      .reverse()
+      .find((n) => destinations.some((d) => d.id === n.id));
+    if (parentDir) {
+      return { directionId: parentDir.id };
+    }
+  }
+
+  // Fallback dans la même racine (Workflow vs Team Workflow)
+  const rootId = path[0]?.id;
+  if (rootId === 'root-team-workflow') {
+    const teamDest = destinations.find((d) => d.id.startsWith('team-'));
+    if (teamDest) return { directionId: teamDest.id };
+  }
+
+  return { directionId: destinations[0].id };
+}
+
+export function addBlankRiskInTree(
+  trees: WorkflowTreeNode[],
+  targetNodeId: string | undefined,
+  actor: string
+): { trees: WorkflowTreeNode[]; createdNodeId: string | null } {
+  const { directionId, afterLeafId } = resolveTargetDirectionIdForInsert(trees, targetNodeId);
+  if (!directionId) return { trees, createdNodeId: null };
+
+  const nextNo = getNextRiskNumber(trees);
+  const blankMeta = createBlankRiskMetadata(nextNo);
+  const prefix = directionId.startsWith('team-') ? 'team' : 'user';
+  const createdId = `${prefix}-2026-rm-risk-new-${nextNo}-${Date.now().toString(36)}`;
+  const nowIso = new Date().toISOString();
+
+  const newRiskNode: WorkflowTreeNode = {
+    id: createdId,
+    label: formatRiskNodeTitle(blankMeta),
+    nodeType: 'document',
+    natureId: 'risk-management',
+    signature: actor || 'OHA',
+    owner: '',
+    status: 'todo',
+    riskMeta: blankMeta,
+    auditTrail: [
+      {
+        id: `at-risk-add-${Date.now()}`,
+        timestamp: nowIso,
+        actor: actor || 'OHA',
+        action: 'Ajout d’un nouveau risque (fiche vierge)',
+        detail: `Risque #${nextNo}`,
+      },
+    ],
+  };
+
+  const walk = (nodes: WorkflowTreeNode[]): WorkflowTreeNode[] =>
+    nodes.map((node) => {
+      if (node.id === directionId) {
+        const currentChildren = node.children || [];
+        if (afterLeafId) {
+          const idx = currentChildren.findIndex((c) => c.id === afterLeafId);
+          if (idx >= 0) {
+            const nextChildren = [
+              ...currentChildren.slice(0, idx + 1),
+              newRiskNode,
+              ...currentChildren.slice(idx + 1),
+            ];
+            return { ...node, children: nextChildren };
+          }
+        }
+        return { ...node, children: [...currentChildren, newRiskNode] };
+      }
+      if (node.children?.length) {
+        const nextChildren = walk(node.children);
+        if (nextChildren !== node.children) {
+          return { ...node, children: nextChildren };
+        }
+      }
+      return node;
+    });
+
+  return { trees: walk(trees), createdNodeId: createdId };
+}
+
+export function deleteRiskInTree(
+  trees: WorkflowTreeNode[],
+  riskNodeId: string
+): { trees: WorkflowTreeNode[]; deletedLabel?: string; nextRiskNodeId: string | null } {
+  const ordered = extractRisksFromTrees(trees);
+  const idx = ordered.findIndex((item) => item.node.id === riskNodeId);
+  if (idx < 0) {
+    return { trees, nextRiskNodeId: ordered[0]?.node.id ?? null };
+  }
+
+  const deletedLabel = ordered[idx].node.label;
+  const nextEntry = ordered[idx + 1] ?? ordered[idx - 1] ?? null;
+
+  const removeFromList = (nodes: WorkflowTreeNode[]): WorkflowTreeNode[] => {
+    let changed = false;
+    const mapped: WorkflowTreeNode[] = [];
+    for (const node of nodes) {
+      if (node.id === riskNodeId) {
+        changed = true;
+        continue;
+      }
+      if (node.children?.length) {
+        const nextChildren = removeFromList(node.children);
+        if (nextChildren !== node.children) {
+          changed = true;
+          mapped.push({ ...node, children: nextChildren });
+          continue;
+        }
+      }
+      mapped.push(node);
+    }
+    return changed ? mapped : nodes;
+  };
+
+  return {
+    trees: removeFromList(trees),
+    deletedLabel,
+    nextRiskNodeId: nextEntry?.node.id ?? null,
+  };
+}
+
+export function duplicateRiskInTree(
+  trees: WorkflowTreeNode[],
+  riskNodeId: string,
+  actor: string
+): { trees: WorkflowTreeNode[]; duplicatedNodeId: string | null } {
+  const sourceNode = findNodeById(trees, riskNodeId);
+  const sourceMeta =
+    sourceNode?.riskMeta ??
+    (sourceNode ? findRiskRecordByRefOrLabel(sourceNode.label) : undefined);
+
+  if (!sourceNode || !sourceMeta) {
+    return { trees, duplicatedNodeId: null };
+  }
+
+  const nextNo = getNextRiskNumber(trees);
+  const prefix = riskNodeId.startsWith('team-') ? 'team' : 'user';
+  const duplicatedId = `${prefix}-2026-rm-risk-dup-${nextNo}-${Date.now().toString(36)}`;
+  const nowIso = new Date().toISOString();
+
+  const hasDirection = Boolean(sourceMeta.direction.trim());
+  const nextSeq = hasDirection
+    ? getNextRiskSequenceForDirection(trees, sourceMeta.direction)
+    : nextNo;
+  const year = extractIdentificationYear(sourceMeta.refRisque, '2026');
+  const nextRef = formatRiskReference(
+    hasDirection ? sourceMeta.direction : 'GEN',
+    nextSeq,
+    year
+  );
+  const nextTitle = sourceMeta.risque.trim()
+    ? `${sourceMeta.risque.trim()} (Copie)`
+    : '';
+
+  const clonedMeta: RiskManagementMetadata = {
+    ...sourceMeta,
+    no: nextNo,
+    refRisque: nextRef,
+    risque: nextTitle,
+    customFields: sourceMeta.customFields ? { ...sourceMeta.customFields } : undefined,
+  };
+
+  const clonedNode: WorkflowTreeNode = {
+    ...sourceNode,
+    id: duplicatedId,
+    label: formatRiskNodeTitle(clonedMeta),
+    riskMeta: clonedMeta,
+    auditTrail: [
+      ...(sourceNode.auditTrail || []),
+      {
+        id: `at-risk-dup-${Date.now()}`,
+        timestamp: nowIso,
+        actor: actor || 'OHA',
+        action: 'Duplication fiche Risk management',
+        detail: `Copie depuis ${formatRiskNodeTitle(sourceMeta)}`,
+      },
+    ],
+  };
+
+  const walk = (nodes: WorkflowTreeNode[]): WorkflowTreeNode[] => {
+    const idx = nodes.findIndex((n) => n.id === riskNodeId);
+    if (idx >= 0) {
+      return [...nodes.slice(0, idx + 1), clonedNode, ...nodes.slice(idx + 1)];
+    }
+    let changed = false;
+    const next = nodes.map((n) => {
+      if (n.children?.length) {
+        const nextChildren = walk(n.children);
+        if (nextChildren !== n.children) {
+          changed = true;
+          return { ...n, children: nextChildren };
+        }
+      }
+      return n;
+    });
+    return changed ? next : nodes;
+  };
+
+  return { trees: walk(trees), duplicatedNodeId: duplicatedId };
+}
+
+export function transferRiskInTree(
+  trees: WorkflowTreeNode[],
+  riskNodeId: string,
+  destinationDirectionNodeId: string,
+  actor: string
+): { trees: WorkflowTreeNode[]; transferred: boolean } {
+  const destinations = collectDirectionContainersFromTrees(trees);
+  const dest = destinations.find((d) => d.id === destinationDirectionNodeId);
+  const sourceNode = findNodeById(trees, riskNodeId);
+  if (!dest || !sourceNode) return { trees, transferred: false };
+
+  const currentMeta =
+    sourceNode.riskMeta ?? findRiskRecordByRefOrLabel(sourceNode.label);
+  if (!currentMeta) return { trees, transferred: false };
+
+  const nowIso = new Date().toISOString();
+  const directionChanged =
+    normalizeDirectionCode(dest.direction) !== normalizeDirectionCode(currentMeta.direction);
+  const year = extractIdentificationYear(currentMeta.refRisque, '2026');
+  const nextRef =
+    directionChanged || !currentMeta.refRisque.trim()
+      ? formatRiskReference(
+          dest.direction,
+          getNextRiskSequenceForDirection(trees, dest.direction),
+          year
+        )
+      : currentMeta.refRisque;
+
+  const updatedMeta: RiskManagementMetadata = {
+    ...currentMeta,
+    cycle: dest.cycle,
+    processus: dest.processus,
+    direction: dest.direction,
+    refRisque: nextRef,
+  };
+
+  const movedNode: WorkflowTreeNode = {
+    ...sourceNode,
+    signature: DIRECTION_SIGNATURES[dest.direction] || sourceNode.signature || 'OHA',
+    riskMeta: updatedMeta,
+    label: formatRiskNodeTitle(updatedMeta),
+    auditTrail: [
+      ...(sourceNode.auditTrail || []),
+      {
+        id: `at-risk-transfer-${Date.now()}`,
+        timestamp: nowIso,
+        actor: actor || 'OHA',
+        action: 'Transfert du risque',
+        detail: `${nextRef} · ${dest.cycle} → ${dest.processus} → ${dest.direction}`,
+      },
+    ],
+  };
+
+  // Retirer d'abord le nœud de sa position actuelle
+  const removeOld = (nodes: WorkflowTreeNode[]): WorkflowTreeNode[] =>
+    nodes
+      .filter((n) => n.id !== riskNodeId)
+      .map((n) =>
+        n.children?.length ? { ...n, children: removeOld(n.children) } : n
+      );
+
+  const withoutOld = removeOld(trees);
+
+  // Puis insérer dans la Direction cible
+  const insertInDest = (nodes: WorkflowTreeNode[]): WorkflowTreeNode[] =>
+    nodes.map((n) => {
+      if (n.id === destinationDirectionNodeId) {
+        return {
+          ...n,
+          children: [...(n.children || []), movedNode],
+        };
+      }
+      if (n.children?.length) {
+        return { ...n, children: insertInDest(n.children) };
+      }
+      return n;
+    });
+
+  return { trees: insertInDest(withoutOld), transferred: true };
+}
+
+function severityRank(value: string): number {
+  const v = value.trim().toLowerCase();
+  if (!v) return 0;
+  if (v.includes('critique')) return 4;
+  if (v.includes('élevé') || v.includes('eleve')) return 3;
+  if (v.includes('moyen')) return 2;
+  if (v.includes('faible')) return 1;
+  return 0;
+}
+
+export function compareRiskRecords(
+  a: RiskManagementMetadata,
+  b: RiskManagementMetadata,
+  field: RiskSortField,
+  direction: RiskSortDirection
+): number {
+  let cmp = 0;
+  if (field === 'no') {
+    cmp = (Number(a.no) || 0) - (Number(b.no) || 0);
+  } else if (
+    field === 'evaluationRisque' ||
+    field === 'probabilite' ||
+    field === 'impact'
+  ) {
+    cmp = severityRank(a[field]) - severityRank(b[field]);
+    if (cmp === 0) cmp = (Number(a.no) || 0) - (Number(b.no) || 0);
+  } else {
+    cmp = String(a[field] || '').localeCompare(String(b[field] || ''), 'fr', {
+      sensitivity: 'base',
+    });
+    if (cmp === 0) cmp = (Number(a.no) || 0) - (Number(b.no) || 0);
+  }
+  return direction === 'asc' ? cmp : -cmp;
+}
+
+export function sortRiskEntries(
+  entries: LiveRiskEntry[],
+  field: RiskSortField,
+  direction: RiskSortDirection
+): LiveRiskEntry[] {
+  return [...entries].sort((a, b) =>
+    compareRiskRecords(a.record, b.record, field, direction)
+  );
+}
+
+export function sortRisksInTrees(
+  trees: WorkflowTreeNode[],
+  field: RiskSortField,
+  direction: RiskSortDirection,
+  scopeNodeId?: string
+): WorkflowTreeNode[] {
+  const sortNodeChildren = (node: WorkflowTreeNode): WorkflowTreeNode => {
+    if (!node.children || node.children.length === 0) return node;
+    const sortedChildren = node.children.map(sortNodeChildren);
+
+    const hasRiskLeaves = sortedChildren.some((c) => Boolean(c.riskMeta));
+    if (hasRiskLeaves) {
+      sortedChildren.sort((a, b) => {
+        const ra = a.riskMeta;
+        const rb = b.riskMeta;
+        if (!ra || !rb) return 0;
+        return compareRiskRecords(ra, rb, field, direction);
+      });
+    } else if (node.natureId === 'risk-management') {
+      if (field === 'cycle' || field === 'direction') {
+        sortedChildren.sort((a, b) => {
+          const c = a.label.localeCompare(b.label, 'fr', { sensitivity: 'base' });
+          return direction === 'asc' ? c : -c;
+        });
+      }
+    }
+
+    return { ...node, children: sortedChildren };
+  };
+
+  if (!scopeNodeId) {
+    return trees.map(sortNodeChildren);
+  }
+
+  const walkScope = (nodes: WorkflowTreeNode[]): WorkflowTreeNode[] =>
+    nodes.map((node) => {
+      if (node.id === scopeNodeId) {
+        return sortNodeChildren(node);
+      }
+      if (node.children?.length) {
+        return { ...node, children: walkScope(node.children) };
+      }
+      return node;
+    });
+
+  return walkScope(trees);
+}
+
 export function updateRiskMetaInTree(
   trees: WorkflowTreeNode[],
   riskNodeId: string,
@@ -2765,19 +3364,36 @@ export function updateRiskMetaInTree(
             patch.no !== undefined && Number.isFinite(Number(patch.no))
               ? Math.max(1, Math.round(Number(patch.no)))
               : currentMeta.no,
+          customFields: {
+            ...(currentMeta.customFields || {}),
+            ...(patch.customFields || {}),
+          },
         };
+
+        // Si la Direction change ou si refRisque est vide alors qu'une Direction est définie,
+        // synchroniser le libellé Risk-<Direction>-<Numéro>-<Année>.
+        const directionChanged =
+          patch.direction !== undefined &&
+          normalizeDirectionCode(patch.direction) !== normalizeDirectionCode(currentMeta.direction);
+        if (
+          patch.refRisque === undefined &&
+          nextMeta.direction.trim() &&
+          (directionChanged || !nextMeta.refRisque.trim())
+        ) {
+          const yr = extractIdentificationYear(currentMeta.refRisque, '2026');
+          nextMeta.refRisque = formatRiskReference(
+            nextMeta.direction,
+            getNextRiskSequenceForDirection(trees, nextMeta.direction),
+            yr
+          );
+        }
 
         const nextLabel = formatRiskNodeTitle(nextMeta);
         return {
           ...node,
           label: nextLabel,
           owner: nextMeta.operationnel,
-          status:
-            nextMeta.evaluationRisque === 'Élevé'
-              ? 'in-review'
-              : nextMeta.evaluationRisque === 'Moyen'
-              ? 'in-progress'
-              : 'validated',
+          status: mapRiskEvaluationToStatus(nextMeta.evaluationRisque),
           riskMeta: nextMeta,
           auditTrail: [
             ...(node.auditTrail || []),
@@ -2786,7 +3402,7 @@ export function updateRiskMetaInTree(
               timestamp: nowIso,
               actor,
               action: 'Modification fiche Risk management',
-              detail: `${nextMeta.refRisque} (${nextMeta.evaluationRisque})`,
+              detail: `${nextMeta.refRisque || `#${nextMeta.no}`} (${nextMeta.evaluationRisque || 'À qualifier'})`,
             },
           ],
         };
