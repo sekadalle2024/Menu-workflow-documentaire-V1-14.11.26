@@ -8,11 +8,17 @@ import {
   downloadBlob,
   sanitizeFilenameSegment,
 } from './etatExportEngine';
+import {
+  getWorkflowTheme,
+  loadSavedWorkflowTheme,
+  WorkflowThemeId,
+} from './workflowTheme';
 
 export interface ExportMissionStepDocOptions {
   node: WorkflowTreeNode;
   tables: ParsedBaseTable[];
   session: Pick<ClientSessionConfig, 'client' | 'userSignature'>;
+  themeId?: WorkflowThemeId;
 }
 
 export interface ExportMissionStepDocResult {
@@ -75,7 +81,12 @@ export function buildMissionStepDocHtml({
   node,
   tables,
   session,
+  themeId,
 }: ExportMissionStepDocOptions): string {
+  const theme = getWorkflowTheme(themeId ?? loadSavedWorkflowTheme());
+  const headBg = theme.tableHeadBg;
+  const headText = theme.tableHeadText;
+  const headDivider = theme.tableHeadDivider;
   const normalizedTables = normalizeWorkflowBaseTables(tables);
   const formatPayload = buildFormatageDataForNode(node, session.client, '2026');
   const maxCols = normalizedTables.reduce(
@@ -97,7 +108,7 @@ export function buildMissionStepDocHtml({
     const headerCells = headers
       .map((h, hIdx) => {
         const width = colWidths[hIdx] || 'auto';
-        return `<th bgcolor="#8B0000" width="${width}" style="width:${width}; background-color:#8B0000; color:#FFFFFF; font-family:'Calibri','Segoe UI',Arial,sans-serif; font-size:9.5pt; font-weight:700; text-align:left; vertical-align:middle; padding:8pt 10pt; border-top:1pt solid #8B0000; border-bottom:1pt solid #6B0F0F; border-left:1pt solid #5C0A0A; border-right:1pt solid #5C0A0A;">${escapeHtml(h)}</th>`;
+        return `<th bgcolor="${headBg}" width="${width}" style="width:${width}; background-color:${headBg}; color:${headText}; font-family:'Calibri','Segoe UI',Arial,sans-serif; font-size:9.5pt; font-weight:700; text-align:left; vertical-align:middle; padding:8pt 10pt; border-top:1pt solid ${headDivider}; border-bottom:1.5pt solid ${headDivider}; border-left:1pt solid ${headDivider}; border-right:1pt solid ${headDivider};">${escapeHtml(h)}</th>`;
       })
       .join('');
 
@@ -132,7 +143,7 @@ export function buildMissionStepDocHtml({
     return `<div class="eaudit-table-card" style="background-color:#FFFFFF; border:1px solid #CBD5E1; border-right:2px solid #94A3B8; border-bottom:3px solid #94A3B8; border-radius:8px; box-shadow:0 6px 18px -3px rgba(15,23,42,0.22), 0 3px 8px -2px rgba(15,23,42,0.14); overflow:hidden; page-break-inside:avoid;">
   <table cellpadding="0" cellspacing="0" border="1" width="100%" style="width:100%; border-collapse:collapse; mso-table-lspace:0pt; mso-table-rspace:0pt; background-color:#FFFFFF; border-color:#CBD5E1;">
     <thead>
-      <tr bgcolor="#8B0000" style="background-color:#8B0000; color:#FFFFFF;">${headerCells}</tr>
+      <tr bgcolor="${headBg}" style="background-color:${headBg}; color:${headText};">${headerCells}</tr>
     </thead>
     <tbody>
       ${bodyRows}

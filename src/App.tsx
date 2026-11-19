@@ -173,6 +173,13 @@ import {
   mergeAuthorizedPhaseChangesIntoTrees,
   subtreeContainsPhaseNodes,
 } from './utils/sharePhaseTree';
+import {
+  applyWorkflowThemeToDocument,
+  getWorkflowTheme,
+  loadSavedWorkflowTheme,
+  saveWorkflowTheme,
+  WorkflowThemeId,
+} from './utils/workflowTheme';
 
 interface HistorySnapshot {
   trees: WorkflowTreeNode[];
@@ -292,6 +299,13 @@ export default function App() {
   const [shareModalRoom, setShareModalRoom] = useState<SharedWorkspaceRoom | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sqliteRefreshNonce, setSqliteRefreshNonce] = useState(0);
+  const [workflowThemeId, setWorkflowThemeId] = useState<WorkflowThemeId>(() =>
+    loadSavedWorkflowTheme()
+  );
+
+  useEffect(() => {
+    applyWorkflowThemeToDocument(workflowThemeId);
+  }, [workflowThemeId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -318,6 +332,17 @@ export default function App() {
     if (statusTimeoutRef.current) window.clearTimeout(statusTimeoutRef.current);
     statusTimeoutRef.current = window.setTimeout(() => setWfStatusMessage(null), 3500);
   }, []);
+
+  const handleSelectWorkflowTheme = useCallback(
+    (nextThemeId: WorkflowThemeId) => {
+      setWorkflowThemeId(nextThemeId);
+      saveWorkflowTheme(nextThemeId);
+      applyWorkflowThemeToDocument(nextThemeId);
+      const def = getWorkflowTheme(nextThemeId);
+      flashStatus(`Thème des workflows appliqué : ${def.label}`);
+    },
+    [flashStatus]
+  );
 
   const pushUndoSnapshot = useCallback(
     (label: string) => {
@@ -2818,6 +2843,8 @@ export default function App() {
           <LeftWorkflowSidebar
             activeNatureId={activeNatureId}
             activeSubMenuId={activeSubMenuId}
+            workflowThemeId={workflowThemeId}
+            onSelectWorkflowTheme={handleSelectWorkflowTheme}
             onActivateWorkflowNature={handleActivateWorkflowNature}
             onActivateWorkflowSubItem={handleActivateWorkflowSubItem}
           />
@@ -3123,6 +3150,8 @@ export default function App() {
           setActiveTab('suivi-recos-analytics');
           setIsRightMenuOpen(false);
         }}
+        workflowThemeId={workflowThemeId}
+        onSelectWorkflowTheme={handleSelectWorkflowTheme}
       />
 
       <ShareCollabModal

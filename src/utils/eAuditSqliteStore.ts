@@ -5,6 +5,7 @@ import {
   ParsedBaseTable,
 } from '../data/missionStepsFormatData';
 import { ClientSessionConfig, MissionStepFormatType, WorkflowTreeNode } from '../types/workflow';
+import type { MissionStepDocumentData } from '../types/missionStepDocument';
 
 export interface SqliteUserRow {
   id: string;
@@ -48,6 +49,7 @@ export interface SqliteMessageContentPayload {
     formatType?: MissionStepFormatType;
     reference?: string;
     nodeId?: string;
+    documentData?: MissionStepDocumentData;
   };
 }
 
@@ -508,6 +510,167 @@ export function getStepTablesFromSqlite(
   };
 }
 
+/** Récupère la structure document Word paginée (titres, sections, paragraphes, tables) depuis aionui.db si disponible */
+export function getStepDocumentFromSqlite(
+  db: EAuditSqliteDatabase,
+  node: WorkflowTreeNode
+): MissionStepDocumentData | null {
+  const candidateIds = [
+    node.sqliteMessageId,
+    `msg_${node.id.replace(/^(user|team)-/, '')}`,
+    `msg_${node.id}`,
+  ].filter(Boolean) as string[];
+
+  const found = db.messages.find((m) => candidateIds.includes(m.id)) || null;
+  if (!found) return null;
+
+  try {
+    const parsed = JSON.parse(found.content) as SqliteMessageContentPayload;
+    const doc = parsed.n8nData?.documentData;
+    if (doc && Array.isArray(doc.blocks)) {
+      return doc;
+    }
+  } catch {
+    // ignore invalid json
+  }
+  return null;
+}
+
+/** Persiste conjointement les tables et le document Word structuré dans SQLite client + serveur */
+export function updateStepDocumentInSqlite(
+  node: WorkflowTreeNode,
+  tables: ParsedBaseTable[],
+  documentData: MissionStepDocumentData | null,
+  userId = 'user_admin_oha',
+  actionDetail = 'Mise à jour document rapport Word (.doc) dans SQLite',
+  clientName = 'Banque Atlantique UMOA'
+): { db: EAuditSqliteDatabase; messageRow: SqliteMessageRow } {
+  const db = loadEAuditSqliteDb();
+  const markdown = tablesToMarkdown(tables);
+  const now = Date.now();
+  const payload = buildFormatageDataForNode(node, clientName, '2026');
+
+  const msgId = node.sqliteMessageId || `msg_${node.id.replace(/^(user|team)-/, '')}`;
+  const convId = node.sqliteConversationId || 'conv_tres_2026_mission';
+
+  const existingIdx = db.messages.findIndex((m) => m.id === msgId);
+  let prevContent: SqliteMessageContentPayload = { content: markdown, type: 'text' };
+  if (existingIdx >= 0) {
+    try {
+      prevContent = JSON.parse(db.messages[existingIdx].content) as SqliteMessageContentPayload;
+    } catch {
+      // ignore fallback
+    }
+  }
+
+  const nextContent: SqliteMessageContentPayload = {
+    ...prevContent,
+    content: markdown,
+    type: 'text',
+    n8nData: {
+      workflowId: prevContent.n8nData?.workflowId || convId,
+      executionId: `exec_${now}`,
+      stepKey: prevContent.n8nData?.stepKey || payload.stepKey,
+      formatType: prevContent.n8nData?.formatType || payload.formatType,
+      reference: prevContent.n8nData?.reference || payload.reference,
+      nodeId: node.id,
+      ...(documentData ? { documentData } : {}),
+    },
+  };
+
+  const updatedRow: SqliteMessageRow =
+    existingIdx >= 0
+      ? {
+          ...db.messages[existingIdx],
+          content: JSON.stringify(nextContent),
+        }
+      : {
+          id: msgId,
+          conversation_id: convId,
+          msg_id: msgId,
+          type: 'text',
+          content: JSON.stringify(nextContent),
+          position: 'left',
+          status: 'finish',
+          created_at: now,
+        };
+
+  if (existingIdx >= 0) {
+    db.messages[existingIdx] = updatedRow;
+  } else {
+    db.messages.push(updatedRow);
+  }
+
+  const convIdx = db.conversations.findIndex((c) => c.id === updatedRow.conversation_id);
+  if (convIdx >= 0) {
+    db.conversations[convIdx] = {
+      ...db.conversations[convIdx],
+      updated_at: now,
+    };
+  } else {
+    db.conversations.push({
+      id: updatedRow.conversation_id,
+      user_id: userId,
+      name: `Workflow Mission — ${updatedRow.conversation_id}`,
+      type: 'n8n',
+      extra: JSON.stringify({
+        n8nData: {
+          workflowId: updatedRow.conversation_id,
+          executionId: `exec_${now}`,
+        },
+        client: clientName,
+      }),
+      model: null,
+      status: 'finished',
+      source: 'aionui',
+      channel_chat_id: `user:${userId}`,
+      created_at: now,
+      updated_at: now,
+    });
+  }
+
+  db.audit_log.unshift({
+    id: `audit_${now}_${Math.random().toString(36).slice(2, 8)}`,
+    user_id: userId,
+    target_user_id: null,
+    action: 'update_message',
+    resource_type: 'message',
+    resource_id: updatedRow.id,
+    details: JSON.stringify({
+      detail: actionDetail,
+      stepTitle: node.label,
+      stepKey: payload.stepKey,
+      tablesCount: tables.length,
+      blocksCount: documentData?.blocks.length ?? 0,
+    }),
+    ip_address: '127.0.0.1',
+    user_agent: 'E-audit / DocumentViewer',
+    created_at: now,
+  });
+
+  saveEAuditSqliteDb(db);
+
+  if (typeof window !== 'undefined' && typeof fetch === 'function') {
+    void fetch(`/api/mission-steps/sqlite/${encodeURIComponent(node.id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        stepLabel: node.label,
+        conversationId: updatedRow.conversation_id,
+        messageId: updatedRow.id,
+        tables,
+        document: documentData ?? undefined,
+        updatedBy: userId,
+        action: actionDetail,
+      }),
+    }).catch(() => {
+      // ignore offline error
+    });
+  }
+
+  return { db, messageRow: updatedRow };
+}
+
 /** Équivalent IPC `database.updateMessageContent` : convertit tables modifiées -> Markdown -> JSON dans messages.content + audit_log */
 export function updateStepTablesInSqlite(
   node: WorkflowTreeNode,
@@ -658,6 +821,7 @@ export function updateStepTablesInSqlite(
 
 export interface DocMissionStepImportResult {
   tables: ParsedBaseTable[];
+  document?: MissionStepDocumentData | null;
   parserEngine: string;
   detectedFormat: string;
   warnings: string[];
@@ -739,6 +903,131 @@ export async function importMissionStepFromDocFile(
 }
 
 /**
+ * Importe un document Word rapport complet (.doc/.docx contenant titres, sections, paragraphes et tableaux)
+ * et persiste la structure complète + les tables dans SQLite (client v17 + serveur aionui.db).
+ */
+export async function importMissionStepFromDocReportFile(
+  file: File,
+  node: WorkflowTreeNode,
+  clientName = 'Banque Atlantique UMOA',
+  userId = 'user_admin_oha'
+): Promise<DocMissionStepImportResult> {
+  const fileBase64 = await readFileAsBase64(file);
+  const msgId = node.sqliteMessageId || `msg_${node.id.replace(/^(user|team)-/, '')}`;
+  const convId = node.sqliteConversationId || 'conv_tres_2026_mission';
+
+  const res = await fetch('/api/mission-steps/import-doc-report', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileName: file.name,
+      fileBase64,
+      nodeId: node.id,
+      stepLabel: node.label,
+      conversationId: convId,
+      messageId: msgId,
+      updatedBy: userId,
+    }),
+  });
+
+  const payload = (await res.json()) as {
+    error?: string;
+    tables?: ParsedBaseTable[];
+    document?: MissionStepDocumentData;
+    parserEngine?: string;
+    detectedFormat?: string;
+    warnings?: string[];
+  };
+
+  if (!res.ok || !payload.document || !Array.isArray(payload.document.blocks)) {
+    throw new Error(
+      payload.error ||
+        `Impossible d'extraire le rapport Word depuis « ${file.name} ».`
+    );
+  }
+
+  const normalizedTables = normalizeWorkflowBaseTables(payload.tables || []);
+  const { messageRow } = updateStepDocumentInSqlite(
+    node,
+    normalizedTables,
+    payload.document,
+    userId,
+    `Import rapport Word (${file.name} · ${normalizedTables.length} table(s) · ${payload.document.blocks.length} bloc(s))`,
+    clientName
+  );
+
+  return {
+    tables: normalizedTables,
+    document: payload.document,
+    parserEngine: payload.parserEngine || 'doc-report-parser',
+    detectedFormat: payload.detectedFormat || 'doc-report',
+    warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
+    messageRow,
+  };
+}
+
+/**
+ * Importe une étape de mission (2 à 10 tables à colonnes variables) depuis un fichier Excel (.xlsx/.xls/.ods/.csv),
+ * écrase les données par défaut de l'étape et persiste dans la base SQLite (client v17 + serveur aionui.db).
+ */
+export async function importMissionStepFromExcelFile(
+  file: File,
+  node: WorkflowTreeNode,
+  clientName = 'Banque Atlantique UMOA',
+  userId = 'user_admin_oha'
+): Promise<DocMissionStepImportResult> {
+  const fileBase64 = await readFileAsBase64(file);
+  const msgId = node.sqliteMessageId || `msg_${node.id.replace(/^(user|team)-/, '')}`;
+  const convId = node.sqliteConversationId || 'conv_tres_2026_mission';
+
+  const res = await fetch('/api/mission-steps/import-excel', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      fileName: file.name,
+      fileBase64,
+      nodeId: node.id,
+      stepLabel: node.label,
+      conversationId: convId,
+      messageId: msgId,
+      updatedBy: userId,
+    }),
+  });
+
+  const payload = (await res.json()) as {
+    error?: string;
+    tables?: ParsedBaseTable[];
+    parserEngine?: string;
+    detectedFormat?: string;
+    warnings?: string[];
+  };
+
+  if (!res.ok || !Array.isArray(payload.tables) || payload.tables.length === 0) {
+    throw new Error(
+      payload.error ||
+        `Impossible d'extraire des tableaux depuis « ${file.name} ».`
+    );
+  }
+
+  const normalizedTables = normalizeWorkflowBaseTables(payload.tables);
+  const { messageRow } = updateStepTablesInSqlite(
+    node,
+    normalizedTables,
+    userId,
+    `Import étape Excel (${file.name} · ${normalizedTables.length} table(s))`,
+    clientName
+  );
+
+  return {
+    tables: normalizedTables,
+    parserEngine: payload.parserEngine || 'excel-parser',
+    detectedFormat: payload.detectedFormat || 'xlsx',
+    warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
+    messageRow,
+  };
+}
+
+/**
  * Hydrate la base SQLite client (aionui.db v17) avec les étapes importées/sauvegardées sur le serveur SQLite.
  * Garantit la persistance complète même après actualisation ou réouverture du navigateur.
  */
@@ -756,6 +1045,7 @@ export async function hydrateClientSqliteFromServer(
         conversationId: string;
         messageId: string;
         tables: ParsedBaseTable[];
+        document?: MissionStepDocumentData | null;
         markdown: string;
         sourceFile?: string | null;
         updatedAt: number;
@@ -768,12 +1058,13 @@ export async function hydrateClientSqliteFromServer(
     const hydratedNodeIds: string[] = [];
 
     for (const rec of records) {
-      if (!rec.nodeId || !Array.isArray(rec.tables) || rec.tables.length === 0) continue;
+      if (!rec.nodeId || (!Array.isArray(rec.tables) && !rec.document)) continue;
+      if (Array.isArray(rec.tables) && rec.tables.length === 0 && !rec.document) continue;
       hydratedNodeIds.push(rec.nodeId);
 
       const convId = rec.conversationId || 'conv_tres_2026_mission';
       const msgId = rec.messageId || `msg_${rec.nodeId.replace(/^(user|team)-/, '')}`;
-      const md = rec.markdown || tablesToMarkdown(rec.tables);
+      const md = rec.markdown || tablesToMarkdown(rec.tables || []);
       const contentPayload: SqliteMessageContentPayload = {
         content: md,
         type: 'text',
@@ -781,6 +1072,7 @@ export async function hydrateClientSqliteFromServer(
           workflowId: convId,
           executionId: `exec_sqlite_${rec.updatedAt}`,
           nodeId: rec.nodeId,
+          ...(rec.document ? { documentData: rec.document } : {}),
         },
       };
 

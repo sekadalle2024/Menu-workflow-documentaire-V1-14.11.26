@@ -8,6 +8,7 @@ import {
   ArrowRightLeft,
   ArrowUp,
   BarChart3,
+  BookOpen,
   CalendarRange,
   Check,
   ChevronDown,
@@ -44,6 +45,7 @@ import {
   MessageSquareWarning,
   MoreVertical,
   Move,
+  Palette,
   Pencil,
   PenLine,
   Plus,
@@ -133,11 +135,21 @@ import {
   resolveMissionStepClassification,
 } from '../data/missionStepsFormatData';
 import {
+  getStepDocumentFromSqlite,
   getStepTablesFromSqlite,
   importMissionStepFromDocFile,
+  importMissionStepFromDocReportFile,
+  importMissionStepFromExcelFile,
   loadEAuditSqliteDb,
 } from '../utils/eAuditSqliteStore';
 import { exportMissionStepToDoc } from '../utils/missionStepDocExporter';
+import { exportMissionStepReportToDoc } from '../utils/missionStepDocReportExporter';
+import { exportMissionStepToExcel } from '../utils/missionStepExcelExporter';
+import {
+  getWorkflowTheme,
+  WORKFLOW_THEMES,
+  WorkflowThemeId,
+} from '../utils/workflowTheme';
 
 interface TriCheckboxProps {
   state: 'checked' | 'unchecked' | 'indeterminate';
@@ -323,6 +335,8 @@ interface RightSlidingMenuProps {
   onShareNode?: (node: WorkflowTreeNode) => void;
   onShareMissionStep?: (node: WorkflowTreeNode, tables: ParsedBaseTable[]) => void;
   sqliteRefreshNonce?: number;
+  workflowThemeId?: WorkflowThemeId;
+  onSelectWorkflowTheme?: (themeId: WorkflowThemeId) => void;
 }
 
 function nodeMatchesSearch(node: WorkflowTreeNode, query: string): boolean {
@@ -437,6 +451,8 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
   onShareNode,
   onShareMissionStep,
   sqliteRefreshNonce = 0,
+  workflowThemeId = 'bordeaux',
+  onSelectWorkflowTheme,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showApiPanel, setShowApiPanel] = useState(false);
@@ -528,13 +544,24 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     nonce: number;
   } | null>(null);
   const [openedMissionStepNode, setOpenedMissionStepNode] = useState<WorkflowTreeNode | null>(null);
+  const [missionStepInitialViewMode, setMissionStepInitialViewMode] = useState<
+    'tables' | 'document' | undefined
+  >(undefined);
   const [showStepHeaderSubmenu, setShowStepHeaderSubmenu] = useState(false);
+  const [showHeaderThemeSubmenu, setShowHeaderThemeSubmenu] = useState(false);
+  const [showStepMenuThemesOpen, setShowStepMenuThemesOpen] = useState(false);
+  const [showCtxThemeSubmenu, setShowCtxThemeSubmenu] = useState(false);
+  const [showStepImportSubmenu, setShowStepImportSubmenu] = useState(false);
+  const [showStepExportSubmenu, setShowStepExportSubmenu] = useState(false);
   const [isImportingStepDoc, setIsImportingStepDoc] = useState(false);
+  const activeWorkflowTheme = getWorkflowTheme(workflowThemeId);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const importDirInputRef = useRef<HTMLInputElement | null>(null);
   const importTargetIdRef = useRef<string | null>(null);
   const stepDocInputRef = useRef<HTMLInputElement | null>(null);
+  const stepReportDocInputRef = useRef<HTMLInputElement | null>(null);
+  const stepExcelInputRef = useRef<HTMLInputElement | null>(null);
   const stepDocTargetNodeRef = useRef<WorkflowTreeNode | null>(null);
 
   const openedRecoInfoNode = useMemo(
@@ -596,7 +623,10 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     }
   }, [openedWordDoc, integratedDataDoc, integratedCollectionDoc]);
 
-  const openMissionStepPanel = (targetNode: WorkflowTreeNode) => {
+  const openMissionStepPanel = (
+    targetNode: WorkflowTreeNode,
+    preferredViewMode?: 'tables' | 'document'
+  ) => {
     if (isNodeLockedOrWithinLockedAncestor(trees, targetNode.id) || targetNode.locked) {
       return;
     }
@@ -609,6 +639,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     setOpenedRiskScopeId(undefined);
     setOpenedAuditPlanState(null);
     setOpenedExportEtat(null);
+    setMissionStepInitialViewMode(preferredViewMode);
     setOpenedMissionStepNode(targetNode);
     setShowStepHeaderSubmenu(false);
     onJumpToNode(targetNode.id);
@@ -620,6 +651,22 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     }
     stepDocTargetNodeRef.current = targetNode;
     stepDocInputRef.current?.click();
+  };
+
+  const triggerStepReportDocImportFromMenu = (targetNode: WorkflowTreeNode) => {
+    if (isNodeLockedOrWithinLockedAncestor(trees, targetNode.id) || targetNode.locked) {
+      return;
+    }
+    stepDocTargetNodeRef.current = targetNode;
+    stepReportDocInputRef.current?.click();
+  };
+
+  const triggerStepExcelImportFromMenu = (targetNode: WorkflowTreeNode) => {
+    if (isNodeLockedOrWithinLockedAncestor(trees, targetNode.id) || targetNode.locked) {
+      return;
+    }
+    stepDocTargetNodeRef.current = targetNode;
+    stepExcelInputRef.current?.click();
   };
 
   const handleContextMenuStepDocChange = async (
@@ -661,6 +708,84 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     }
   };
 
+  const handleContextMenuStepExcelChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    const targetNode = stepDocTargetNodeRef.current;
+    e.target.value = '';
+    if (!file || !targetNode) return;
+    if (isNodeLockedOrWithinLockedAncestor(trees, targetNode.id) || targetNode.locked) {
+      return;
+    }
+    setIsImportingStepDoc(true);
+    try {
+      const result = await importMissionStepFromExcelFile(
+        file,
+        targetNode,
+        session.client,
+        'user_admin_oha'
+      );
+      const updatedNode: WorkflowTreeNode = {
+        ...targetNode,
+        sqliteHasData: true,
+      };
+      onSqliteSynced?.(
+        `Étape « ${targetNode.label} » importée depuis Excel « ${file.name} » (${result.tables.length} table(s)) et sauvegardée dans SQLite`,
+        updatedNode,
+        result.tables
+      );
+      openMissionStepPanel(updatedNode);
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : `Impossible d'importer le fichier Excel « ${file.name} ».`;
+      onSqliteSynced?.(`Erreur import étape mission (Excel) : ${msg}`);
+    } finally {
+      setIsImportingStepDoc(false);
+    }
+  };
+
+  const handleContextMenuStepReportDocChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    const targetNode = stepDocTargetNodeRef.current;
+    e.target.value = '';
+    if (!file || !targetNode) return;
+    if (isNodeLockedOrWithinLockedAncestor(trees, targetNode.id) || targetNode.locked) {
+      return;
+    }
+    setIsImportingStepDoc(true);
+    try {
+      const result = await importMissionStepFromDocReportFile(
+        file,
+        targetNode,
+        session.client,
+        'user_admin_oha'
+      );
+      const updatedNode: WorkflowTreeNode = {
+        ...targetNode,
+        sqliteHasData: true,
+      };
+      onSqliteSynced?.(
+        `Rapport Word « ${targetNode.label} » importé depuis « ${file.name} » (${result.document?.blocks.length ?? 0} bloc(s), ${result.tables.length} table(s)) et sauvegardé dans SQLite`,
+        updatedNode,
+        result.tables
+      );
+      openMissionStepPanel(updatedNode, 'document');
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : `Impossible d'importer le rapport Word « ${file.name} ».`;
+      onSqliteSynced?.(`Erreur import rapport Word (.doc) : ${msg}`);
+    } finally {
+      setIsImportingStepDoc(false);
+    }
+  };
+
   const handleExportStepDocFromMenu = (targetNode: WorkflowTreeNode) => {
     try {
       const db = loadEAuditSqliteDb(session);
@@ -679,6 +804,50 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
           ? err.message
           : "Impossible d'exporter cette étape de mission en .doc.";
       onSqliteSynced?.(`Erreur export étape mission (.doc) : ${msg}`);
+    }
+  };
+
+  const handleExportStepDocReportFromMenu = (targetNode: WorkflowTreeNode) => {
+    try {
+      const db = loadEAuditSqliteDb(session);
+      const { tables } = getStepTablesFromSqlite(db, targetNode, session.client);
+      const documentData = getStepDocumentFromSqlite(db, targetNode);
+      const res = exportMissionStepReportToDoc({
+        node: targetNode,
+        tables,
+        document: documentData,
+        session,
+      });
+      onSqliteSynced?.(
+        `Rapport Word « ${targetNode.label} » exporté (${res.filename} · ${res.tableCount} table(s))`
+      );
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Impossible d'exporter le rapport Word (.doc) de cette étape.";
+      onSqliteSynced?.(`Erreur export rapport Word (.doc) : ${msg}`);
+    }
+  };
+
+  const handleExportStepExcelFromMenu = async (targetNode: WorkflowTreeNode) => {
+    try {
+      const db = loadEAuditSqliteDb(session);
+      const { tables } = getStepTablesFromSqlite(db, targetNode, session.client);
+      const res = await exportMissionStepToExcel({
+        node: targetNode,
+        tables,
+        session,
+      });
+      onSqliteSynced?.(
+        `Étape « ${targetNode.label} » exportée en Excel (${res.filename} · ${res.tableCount} table(s))`
+      );
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Impossible d'exporter cette étape de mission en Excel.";
+      onSqliteSynced?.(`Erreur export étape mission (Excel) : ${msg}`);
     }
   };
 
@@ -1069,6 +1238,9 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
     const clampedY = Math.min(y, window.innerHeight - menuHeight - 12);
     setShowNatureSubmenu(false);
     setShowStatusSubmenu(false);
+    setShowCtxThemeSubmenu(false);
+    setShowStepImportSubmenu(false);
+    setShowStepExportSubmenu(false);
     setShowExportEtatSubmenu(
       node?.natureId === 'suivi-recos' || node?.natureId === 'plan-audit'
     );
@@ -1646,6 +1818,26 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
         }}
       />
 
+      <input
+        ref={stepReportDocInputRef}
+        type="file"
+        accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        className="hidden"
+        onChange={(e) => {
+          void handleContextMenuStepReportDocChange(e);
+        }}
+      />
+
+      <input
+        ref={stepExcelInputRef}
+        type="file"
+        accept=".xlsx,.xls,.xlsm,.ods,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+        className="hidden"
+        onChange={(e) => {
+          void handleContextMenuStepExcelChange(e);
+        }}
+      />
+
       <div
         aria-hidden={!isOpen}
         onClick={onClose}
@@ -1658,7 +1850,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
         id="dossier-mission-panel"
         aria-label="Menu coulissant — Workflows documentaires"
         aria-hidden={!isOpen}
-        className={`fixed top-0 right-0 z-50 flex h-full w-full flex-col border-l border-slate-800 bg-slate-900 text-slate-100 shadow-2xl transition-[transform,max-width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        className={`wf-sliding-aside fixed top-0 right-0 z-50 flex h-full w-full flex-col border-l shadow-2xl transition-[transform,max-width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           openedWordDoc ||
           integratedDataDoc ||
           integratedCollectionDoc ||
@@ -1673,7 +1865,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
       >
         {/* Header identité & accès API — masqué quand une étape de mission occupe toute la partie haute */}
         {!isMissionStepTopMode && (
-        <div className="flex items-center justify-between gap-4 border-b border-slate-800 px-5 py-3.5">
+        <div className="wf-theme-chrome relative flex items-center justify-between gap-4 border-b border-slate-800 px-5 py-3.5">
           <div className="min-w-0">
             <h2 className="font-display truncate text-base font-semibold text-white">
               Menu coulissant · Workflows documentaires
@@ -1743,6 +1935,94 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
               <span>Stats &amp; Gantt</span>
             </button>
 
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                aria-expanded={showHeaderThemeSubmenu}
+                onClick={() => setShowHeaderThemeSubmenu((v) => !v)}
+                title={`Section Thèmes — Actif : ${activeWorkflowTheme.label}`}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  showHeaderThemeSubmenu
+                    ? 'border-blue-500 bg-blue-950/70 text-blue-200'
+                    : 'border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                }`}
+              >
+                <Palette className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>Thèmes</span>
+                <span
+                  className="h-2.5 w-2.5 rounded-full border shrink-0"
+                  style={{
+                    backgroundColor: activeWorkflowTheme.swatchHex,
+                    borderColor: activeWorkflowTheme.swatchBorderHex,
+                  }}
+                  aria-hidden="true"
+                />
+                <ChevronDown
+                  className={`h-3 w-3 transition-transform ${
+                    showHeaderThemeSubmenu ? 'rotate-180' : ''
+                  }`}
+                  aria-hidden="true"
+                />
+              </button>
+
+              {showHeaderThemeSubmenu && (
+                <div
+                  role="menu"
+                  aria-label="Sous-menu Thèmes workflow"
+                  className="wf-theme-chrome absolute right-0 top-full z-40 mt-1.5 w-60 rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl"
+                >
+                  <div className="mb-1.5 flex items-center justify-between border-b border-slate-800 px-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    <span>Thèmes (Couleurs marque)</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowHeaderThemeSubmenu(false)}
+                      aria-label="Fermer le sous-menu Thèmes"
+                      className="rounded p-0.5 text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <div className="space-y-1">
+                    {WORKFLOW_THEMES.map((theme) => {
+                      const isSelected = theme.id === activeWorkflowTheme.id;
+                      return (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={isSelected}
+                          onClick={() => {
+                            onSelectWorkflowTheme?.(theme.id);
+                            setShowHeaderThemeSubmenu(false);
+                          }}
+                          className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-blue-950/70 font-semibold text-white ring-1 ring-blue-500/70'
+                              : 'text-slate-200 hover:bg-slate-800 hover:text-white'
+                          }`}
+                        >
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span
+                              className="h-3.5 w-3.5 shrink-0 rounded-full border"
+                              style={{
+                                backgroundColor: theme.swatchHex,
+                                borderColor: theme.swatchBorderHex,
+                              }}
+                              aria-hidden="true"
+                            />
+                            <span className="truncate">{theme.label}</span>
+                          </span>
+                          {isSelected && (
+                            <Check className="h-3.5 w-3.5 shrink-0 text-emerald-400" aria-hidden="true" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() => setShowApiPanel((v) => !v)}
@@ -1772,7 +2052,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
         {showApiPanel && (
           <form
             onSubmit={handleValidateKeys}
-            className="space-y-3 border-b border-slate-800 bg-slate-950/60 px-5 py-3.5 text-xs"
+            className="wf-theme-chrome space-y-3 border-b border-slate-800 bg-slate-950/60 px-5 py-3.5 text-xs"
           >
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
               <div>
@@ -1850,7 +2130,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
           Boolean(collectionPickerPrompt) ||
           Boolean(addToCollectionPrompt) ||
           Boolean(statusMessage)) && (
-        <div className="space-y-2.5 border-b border-slate-800 px-5 py-3">
+        <div className="wf-theme-chrome space-y-2.5 border-b border-slate-800 px-5 py-3">
           {!isMissionStepTopMode && (
             <>
               <div className="relative">
@@ -2569,7 +2849,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                                 <div className="overflow-x-auto">
                                   <table className="w-full border-collapse text-left text-xs">
                                     <thead>
-                                      <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
+                                      <tr className="wf-table-head-row divide-x text-[12px] font-semibold">
                                         {tbl.headers.map((h, i) => (
                                           <th
                                             key={i}
@@ -2798,6 +3078,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                 node={findNodeById(trees, openedMissionStepNode.id) ?? openedMissionStepNode}
                 session={session}
                 refreshKey={sqliteRefreshNonce}
+                initialViewMode={missionStepInitialViewMode}
                 flushTop
                 isLocked={
                   isNodeLockedOrWithinLockedAncestor(trees, openedMissionStepNode.id) ||
@@ -2821,7 +3102,7 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
 
           {/* Arborescence Workflow & Team Workflow + Inspecteur contextuel */}
           <div
-            className={`relative flex min-h-0 flex-col overflow-hidden ${
+            className={`wf-theme-chrome relative flex min-h-0 flex-col overflow-hidden ${
               openedWordDoc ||
               integratedDataDoc ||
               integratedCollectionDoc ||
@@ -2996,6 +3277,74 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                         >
                           <span>Masquer sous-menu</span>
                         </button>
+                      </div>
+
+                      {/* Section Thèmes + sous-menu des 6 thèmes marque */}
+                      <div className="rounded-md border border-slate-700/80 bg-slate-950/60 p-1.5">
+                        <button
+                          type="button"
+                          aria-expanded={showStepMenuThemesOpen}
+                          onClick={() => setShowStepMenuThemesOpen((v) => !v)}
+                          className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-xs font-medium text-slate-200 hover:bg-slate-800 cursor-pointer"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <Palette className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <span>Thèmes</span>
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-300">
+                            <span
+                              className="h-2.5 w-2.5 rounded-full border"
+                              style={{
+                                backgroundColor: activeWorkflowTheme.swatchHex,
+                                borderColor: activeWorkflowTheme.swatchBorderHex,
+                              }}
+                              aria-hidden="true"
+                            />
+                            <span>{activeWorkflowTheme.label}</span>
+                            <ChevronDown
+                              className={`h-3 w-3 transition-transform ${
+                                showStepMenuThemesOpen ? 'rotate-180' : ''
+                              }`}
+                              aria-hidden="true"
+                            />
+                          </span>
+                        </button>
+
+                        {showStepMenuThemesOpen && (
+                          <div
+                            role="menu"
+                            aria-label="Sous-menu Thèmes workflow compact"
+                            className="mt-1.5 grid grid-cols-2 gap-1 border-t border-slate-800 pt-1.5"
+                          >
+                            {WORKFLOW_THEMES.map((theme) => {
+                              const isSelected = theme.id === activeWorkflowTheme.id;
+                              return (
+                                <button
+                                  key={theme.id}
+                                  type="button"
+                                  role="menuitemradio"
+                                  aria-checked={isSelected}
+                                  onClick={() => onSelectWorkflowTheme?.(theme.id)}
+                                  className={`flex items-center gap-1.5 rounded px-2 py-1 text-left text-[11px] transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? 'bg-blue-950/80 font-semibold text-white ring-1 ring-blue-500/70'
+                                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                                  }`}
+                                >
+                                  <span
+                                    className="h-3 w-3 shrink-0 rounded-full border"
+                                    style={{
+                                      backgroundColor: theme.swatchHex,
+                                      borderColor: theme.swatchBorderHex,
+                                    }}
+                                    aria-hidden="true"
+                                  />
+                                  <span className="truncate">{theme.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -4064,32 +4413,147 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                           <span>Ouvrir étape (Tables liées · Forme de base)</span>
                         </button>
 
-                        <button
-                          type="button"
-                          role="menuitem"
-                          disabled={nodeEffectivelyLocked || isImportingStepDoc}
-                          onClick={() => {
-                            triggerStepDocImportFromMenu(ctxNode);
-                            setContextMenu(null);
-                          }}
-                          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-emerald-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
-                        >
-                          <FileUp className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-                          <span>Importer étape mission (.doc)</span>
-                        </button>
+                        <div>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            aria-expanded={showStepImportSubmenu}
+                            disabled={nodeEffectivelyLocked || isImportingStepDoc}
+                            onClick={() => {
+                              setShowStepExportSubmenu(false);
+                              setShowStepImportSubmenu((v) => !v);
+                            }}
+                            className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-emerald-300 hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
+                          >
+                            <span className="flex items-center gap-2.5">
+                              <FileUp className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                              <span>Importer étape mission</span>
+                            </span>
+                            <ChevronRight
+                              className={`h-3.5 w-3.5 text-slate-400 transition-transform ${
+                                showStepImportSubmenu ? 'rotate-90' : ''
+                              }`}
+                              aria-hidden="true"
+                            />
+                          </button>
 
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => {
-                            handleExportStepDocFromMenu(ctxNode);
-                            setContextMenu(null);
-                          }}
-                          className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-rose-300 hover:bg-slate-800 hover:text-white cursor-pointer"
-                        >
-                          <FileDown className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
-                          <span>Exporter étape mission (.doc)</span>
-                        </button>
+                          {showStepImportSubmenu && (
+                            <div
+                              role="menu"
+                              aria-label="Sous-menu format import étape de mission"
+                              className="mx-2 my-1 space-y-0.5 rounded-lg border border-slate-800 bg-slate-950 p-1"
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={nodeEffectivelyLocked || isImportingStepDoc}
+                                onClick={() => {
+                                  triggerStepDocImportFromMenu(ctxNode);
+                                  setContextMenu(null);
+                                }}
+                                className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                              >
+                                <FileText className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                                <span>Word · Tables (.doc / .docx)</span>
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={nodeEffectivelyLocked || isImportingStepDoc}
+                                onClick={() => {
+                                  triggerStepReportDocImportFromMenu(ctxNode);
+                                  setContextMenu(null);
+                                }}
+                                className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                              >
+                                <BookOpen className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                                <span>Word · Rapport (.doc / .docx)</span>
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={nodeEffectivelyLocked || isImportingStepDoc}
+                                onClick={() => {
+                                  triggerStepExcelImportFromMenu(ctxNode);
+                                  setContextMenu(null);
+                                }}
+                                className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                              >
+                                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                                <span>Excel (.xlsx / .xls)</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            aria-expanded={showStepExportSubmenu}
+                            onClick={() => {
+                              setShowStepImportSubmenu(false);
+                              setShowStepExportSubmenu((v) => !v);
+                            }}
+                            className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-rose-300 hover:bg-slate-800 hover:text-white cursor-pointer"
+                          >
+                            <span className="flex items-center gap-2.5">
+                              <FileDown className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                              <span>Exporter étape mission</span>
+                            </span>
+                            <ChevronRight
+                              className={`h-3.5 w-3.5 text-slate-400 transition-transform ${
+                                showStepExportSubmenu ? 'rotate-90' : ''
+                              }`}
+                              aria-hidden="true"
+                            />
+                          </button>
+
+                          {showStepExportSubmenu && (
+                            <div
+                              role="menu"
+                              aria-label="Sous-menu format export étape de mission"
+                              className="mx-2 my-1 space-y-0.5 rounded-lg border border-slate-800 bg-slate-950 p-1"
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  handleExportStepDocFromMenu(ctxNode);
+                                  setContextMenu(null);
+                                }}
+                                className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                              >
+                                <FileText className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                                <span>Word · Tables (.doc)</span>
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  handleExportStepDocReportFromMenu(ctxNode);
+                                  setContextMenu(null);
+                                }}
+                                className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                              >
+                                <BookOpen className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                                <span>Word · Rapport (.doc)</span>
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => {
+                                  void handleExportStepExcelFromMenu(ctxNode);
+                                  setContextMenu(null);
+                                }}
+                                className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 hover:text-white cursor-pointer"
+                              >
+                                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                                <span>Excel (.xlsx)</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </>
                     )}
 
@@ -4819,6 +5283,83 @@ export const RightSlidingMenu: React.FC<RightSlidingMenuProps> = ({
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Section Thèmes avec sous-menu des couleurs de marque */}
+              <div className="border-t border-slate-800 py-1">
+                <button
+                  type="button"
+                  role="menuitem"
+                  aria-expanded={showCtxThemeSubmenu}
+                  onClick={() => setShowCtxThemeSubmenu((v) => !v)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-slate-800 hover:text-white cursor-pointer"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <Palette className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                    <span>Thèmes</span>
+                    <span className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-950/70 px-1.5 py-0.5 text-[10px] text-slate-300">
+                      <span
+                        className="h-2 w-2 rounded-full border"
+                        style={{
+                          backgroundColor: activeWorkflowTheme.swatchHex,
+                          borderColor: activeWorkflowTheme.swatchBorderHex,
+                        }}
+                        aria-hidden="true"
+                      />
+                      <span>{activeWorkflowTheme.label}</span>
+                    </span>
+                  </span>
+                  <ChevronRight
+                    className={`h-3.5 w-3.5 text-slate-400 transition-transform ${
+                      showCtxThemeSubmenu ? 'rotate-90' : ''
+                    }`}
+                    aria-hidden="true"
+                  />
+                </button>
+
+                {showCtxThemeSubmenu && (
+                  <div
+                    role="menu"
+                    aria-label="Sous-menu Thèmes"
+                    className="mx-2 my-1 space-y-0.5 rounded-lg border border-slate-800 bg-slate-950 p-1"
+                  >
+                    {WORKFLOW_THEMES.map((theme) => {
+                      const isSelected = theme.id === activeWorkflowTheme.id;
+                      return (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={isSelected}
+                          onClick={() => {
+                            onSelectWorkflowTheme?.(theme.id);
+                            setContextMenu(null);
+                          }}
+                          className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-[11px] transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-blue-950/80 font-semibold text-white'
+                              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            <span
+                              className="h-3 w-3 shrink-0 rounded-full border"
+                              style={{
+                                backgroundColor: theme.swatchHex,
+                                borderColor: theme.swatchBorderHex,
+                              }}
+                              aria-hidden="true"
+                            />
+                            <span>{theme.label}</span>
+                          </span>
+                          {isSelected && (
+                            <Check className="h-3 w-3 text-emerald-400" aria-hidden="true" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {ctxNode.nodeType !== 'root' && (

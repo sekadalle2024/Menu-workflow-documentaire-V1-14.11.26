@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
+  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
@@ -11,6 +12,7 @@ import {
   Eye,
   FileDown,
   FilePlus2,
+  FileSpreadsheet,
   FileText,
   FileUp,
   Folder,
@@ -45,12 +47,17 @@ import {
   WorkflowTreeNode,
 } from '../types/workflow';
 import {
+  getStepDocumentFromSqlite,
   getStepTablesFromSqlite,
   importMissionStepFromDocFile,
+  importMissionStepFromDocReportFile,
+  importMissionStepFromExcelFile,
   loadEAuditSqliteDb,
   tablesToMarkdown,
 } from '../utils/eAuditSqliteStore';
 import { exportMissionStepToDoc } from '../utils/missionStepDocExporter';
+import { exportMissionStepReportToDoc } from '../utils/missionStepDocReportExporter';
+import { exportMissionStepToExcel } from '../utils/missionStepExcelExporter';
 import {
   filterMissionTreeForStepAndPhases,
   filterNodeByAllowedPhases,
@@ -79,6 +86,10 @@ import {
   setNodesStatusInTree,
 } from '../utils/workflowTreeOps';
 import { MissionStepTableViewer } from './MissionStepTableViewer';
+import {
+  applyWorkflowThemeToDocument,
+  loadSavedWorkflowTheme,
+} from '../utils/workflowTheme';
 
 interface SharedGuestWorkspaceProps {
   token: string;
@@ -129,6 +140,10 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
 }) => {
   const [room, setRoom] = useState<SharedWorkspaceRoom | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    applyWorkflowThemeToDocument(loadSavedWorkflowTheme());
+  }, []);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [guestActor, setGuestActor] = useState<string>(() => {
@@ -172,6 +187,11 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
   } | null>(null);
   const [recoSearch, setRecoSearch] = useState('');
   const [showWorkflowPane, setShowWorkflowPane] = useState(true);
+  const [showStepImportSubmenu, setShowStepImportSubmenu] = useState(false);
+  const [showStepExportSubmenu, setShowStepExportSubmenu] = useState(false);
+  const [guestStepInitialViewMode, setGuestStepInitialViewMode] = useState<
+    'tables' | 'document' | undefined
+  >(undefined);
   const [recoContextMenu, setRecoContextMenu] = useState<{
     x: number;
     y: number;
@@ -184,6 +204,8 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
   const fileUploadInputRef = useRef<HTMLInputElement | null>(null);
   const importTargetIdRef = useRef<string | null>(null);
   const stepDocUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const stepReportDocUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const stepExcelUploadInputRef = useRef<HTMLInputElement | null>(null);
   const stepDocTargetNodeRef = useRef<WorkflowTreeNode | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const recoContextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -560,6 +582,67 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
     }
   };
 
+  const handleGuestStepExcelUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    const targetNode = stepDocTargetNodeRef.current;
+    e.target.value = '';
+    if (!file || !targetNode || !room || !room.allowEdit) return;
+    const actor = guestActor.trim() || 'Collaborateur invité';
+    try {
+      const result = await importMissionStepFromExcelFile(
+        file,
+        targetNode,
+        room.clientName,
+        actor
+      );
+      await handleGuestStepTablesChange(
+        targetNode,
+        result.tables,
+        `Import Excel (${file.name} · ${result.tables.length} tables)`
+      );
+      setSelectedNodeId(targetNode.id);
+    } catch (err) {
+      setErrorBanner(
+        err instanceof Error
+          ? err.message
+          : `Impossible d'importer le fichier Excel « ${file.name} ».`
+      );
+    }
+  };
+
+  const handleGuestStepReportDocUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    const targetNode = stepDocTargetNodeRef.current;
+    e.target.value = '';
+    if (!file || !targetNode || !room || !room.allowEdit) return;
+    const actor = guestActor.trim() || 'Collaborateur invité';
+    try {
+      const result = await importMissionStepFromDocReportFile(
+        file,
+        targetNode,
+        room.clientName,
+        actor
+      );
+      setGuestStepInitialViewMode('document');
+      await handleGuestStepTablesChange(
+        targetNode,
+        result.tables,
+        `Import Rapport Word (${file.name} · ${result.tables.length} tables)`
+      );
+      setSelectedNodeId(targetNode.id);
+    } catch (err) {
+      setErrorBanner(
+        err instanceof Error
+          ? err.message
+          : `Impossible d'importer le rapport Word « ${file.name} ».`
+      );
+    }
+  };
+
   const handleExportGuestStepToDoc = (targetNode: WorkflowTreeNode) => {
     if (!room) return;
     try {
@@ -584,6 +667,61 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
         err instanceof Error
           ? err.message
           : "Impossible d'exporter cette étape de mission en .doc."
+      );
+    }
+  };
+
+  const handleExportGuestStepToDocReport = (targetNode: WorkflowTreeNode) => {
+    if (!room) return;
+    try {
+      const db = loadEAuditSqliteDb(guestSession);
+      const explicitTables = room.tablesByNodeId?.[targetNode.id];
+      const tables = explicitTables && explicitTables.length > 0
+        ? normalizeWorkflowBaseTables(explicitTables)
+        : normalizeWorkflowBaseTables(
+            getStepTablesFromSqlite(db, targetNode, guestSession.client).tables
+          );
+      const documentData = getStepDocumentFromSqlite(db, targetNode);
+      const res = exportMissionStepReportToDoc({
+        node: targetNode,
+        tables,
+        document: documentData,
+        session: guestSession,
+      });
+      showToast(`Export Rapport .doc généré : ${res.filename}`);
+    } catch (err) {
+      setErrorBanner(
+        err instanceof Error
+          ? err.message
+          : "Impossible d'exporter le rapport Word (.doc) de cette étape."
+      );
+    }
+  };
+
+  const handleExportGuestStepToExcel = async (targetNode: WorkflowTreeNode) => {
+    if (!room) return;
+    try {
+      const explicitTables = room.tablesByNodeId?.[targetNode.id];
+      const tables = explicitTables && explicitTables.length > 0
+        ? normalizeWorkflowBaseTables(explicitTables)
+        : normalizeWorkflowBaseTables(
+            getStepTablesFromSqlite(
+              loadEAuditSqliteDb(guestSession),
+              targetNode,
+              guestSession.client
+            ).tables
+          );
+      const res = await exportMissionStepToExcel({
+        node: targetNode,
+        tables,
+        session: guestSession,
+      });
+      showToast(`Export Excel généré : ${res.filename}`);
+    } catch (err) {
+      setErrorBanner(
+        err instanceof Error
+          ? err.message
+          : "Impossible d'exporter cette étape de mission en Excel."
       );
     }
   };
@@ -1177,6 +1315,8 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
       typeof window !== 'undefined' ? window.innerWidth - menuWidth - 12 : clientX;
     const maxY =
       typeof window !== 'undefined' ? window.innerHeight - menuHeight - 12 : clientY;
+    setShowStepImportSubmenu(false);
+    setShowStepExportSubmenu(false);
     setContextMenu({
       x: Math.max(12, Math.min(clientX, maxX)),
       y: Math.max(12, Math.min(clientY, maxY)),
@@ -1457,6 +1597,24 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
           void handleGuestStepDocUpload(e);
         }}
       />
+      <input
+        ref={stepReportDocUploadInputRef}
+        type="file"
+        accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        className="hidden"
+        onChange={(e) => {
+          void handleGuestStepReportDocUpload(e);
+        }}
+      />
+      <input
+        ref={stepExcelUploadInputRef}
+        type="file"
+        accept=".xlsx,.xls,.xlsm,.ods,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+        className="hidden"
+        onChange={(e) => {
+          void handleGuestStepExcelUpload(e);
+        }}
+      />
       {/* Bandeau supérieur uniquement lorsque la TreeView latérale est masquée ou pour Suivi des Recos */}
       {!isSplitViewActive && (
         <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-4 py-2 text-xs">
@@ -1599,6 +1757,7 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
                 hideSendToChat
                 flushTop
                 compactHeader
+                initialViewMode={guestStepInitialViewMode}
                 externalTables={activeStepTables}
                 onExternalTablesChange={(nextTables, reason) =>
                   void handleGuestStepTablesChange(activeNode, nextTables, reason)
@@ -2309,34 +2468,148 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
                 room.allowEdit &&
                 (inAuthorizedPhase || isSharedPrimaryStep) &&
                 !ctxNode.locked && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      stepDocTargetNodeRef.current = ctxNode;
-                      setContextMenu(null);
-                      stepDocUploadInputRef.current?.click();
-                    }}
-                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-emerald-200 hover:bg-emerald-950/60 cursor-pointer"
-                  >
-                    <FileUp className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-                    <span>Importer étape mission (.doc)</span>
-                  </button>
+                  <div>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      aria-expanded={showStepImportSubmenu}
+                      onClick={() => {
+                        setShowStepExportSubmenu(false);
+                        setShowStepImportSubmenu((v) => !v);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-emerald-200 hover:bg-emerald-950/60 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2">
+                        <FileUp className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                        <span>Importer étape mission</span>
+                      </span>
+                      <ChevronRight
+                        className={`h-3.5 w-3.5 text-slate-400 transition-transform ${
+                          showStepImportSubmenu ? 'rotate-90' : ''
+                        }`}
+                        aria-hidden="true"
+                      />
+                    </button>
+
+                    {showStepImportSubmenu && (
+                      <div
+                        role="menu"
+                        aria-label="Sous-menu format import étape de mission"
+                        className="mx-1.5 my-1 space-y-0.5 rounded-lg border border-slate-800 bg-slate-950 p-1"
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            stepDocTargetNodeRef.current = ctxNode;
+                            setContextMenu(null);
+                            stepDocUploadInputRef.current?.click();
+                          }}
+                          className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 cursor-pointer"
+                        >
+                          <FileText className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                          <span>Word · Tables (.doc / .docx)</span>
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            stepDocTargetNodeRef.current = ctxNode;
+                            setContextMenu(null);
+                            stepReportDocUploadInputRef.current?.click();
+                          }}
+                          className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 cursor-pointer"
+                        >
+                          <BookOpen className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                          <span>Word · Rapport (.doc / .docx)</span>
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => {
+                            stepDocTargetNodeRef.current = ctxNode;
+                            setContextMenu(null);
+                            stepExcelUploadInputRef.current?.click();
+                          }}
+                          className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 cursor-pointer"
+                        >
+                          <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                          <span>Excel (.xlsx / .xls)</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 )}
 
               {isStep && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setContextMenu(null);
-                    handleExportGuestStepToDoc(ctxNode);
-                  }}
-                  className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-rose-200 hover:bg-rose-950/50 cursor-pointer"
-                >
-                  <FileDown className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
-                  <span>Exporter étape mission (.doc)</span>
-                </button>
+                <div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    aria-expanded={showStepExportSubmenu}
+                    onClick={() => {
+                      setShowStepImportSubmenu(false);
+                      setShowStepExportSubmenu((v) => !v);
+                    }}
+                    className="flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-rose-200 hover:bg-rose-950/50 cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      <FileDown className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                      <span>Exporter étape mission</span>
+                    </span>
+                    <ChevronRight
+                      className={`h-3.5 w-3.5 text-slate-400 transition-transform ${
+                        showStepExportSubmenu ? 'rotate-90' : ''
+                      }`}
+                      aria-hidden="true"
+                    />
+                  </button>
+
+                  {showStepExportSubmenu && (
+                    <div
+                      role="menu"
+                      aria-label="Sous-menu format export étape de mission"
+                      className="mx-1.5 my-1 space-y-0.5 rounded-lg border border-slate-800 bg-slate-950 p-1"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setContextMenu(null);
+                          handleExportGuestStepToDoc(ctxNode);
+                        }}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 cursor-pointer"
+                      >
+                        <FileText className="h-3.5 w-3.5 text-sky-400" aria-hidden="true" />
+                        <span>Word · Tables (.doc)</span>
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setContextMenu(null);
+                          handleExportGuestStepToDocReport(ctxNode);
+                        }}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 cursor-pointer"
+                      >
+                        <BookOpen className="h-3.5 w-3.5 text-rose-400" aria-hidden="true" />
+                        <span>Word · Rapport (.doc)</span>
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setContextMenu(null);
+                          void handleExportGuestStepToExcel(ctxNode);
+                        }}
+                        className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[11px] text-slate-200 hover:bg-slate-800 cursor-pointer"
+                      >
+                        <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                        <span>Excel (.xlsx)</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
 
               {canCreateInside && (
@@ -2527,7 +2800,7 @@ export const SharedGuestWorkspace: React.FC<SharedGuestWorkspaceProps> = ({
             <div className="overflow-x-auto rounded-lg border border-slate-300/90 bg-white shadow-[0_6px_18px_-3px_rgba(15,23,42,0.22),0_3px_8px_-2px_rgba(15,23,42,0.14)]">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
-                  <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
+                  <tr className="wf-table-head-row divide-x text-[12px] font-semibold">
                     <th className="px-3.5 py-2.5 whitespace-nowrap">N° / Réf</th>
                     <th className="px-3.5 py-2.5 whitespace-nowrap">Mission &amp; Direction</th>
                     <th className="px-3.5 py-2.5">Recommandation</th>

@@ -4,11 +4,14 @@ import express from 'express';
 import type { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import { parseDocFileToMissionTables } from './server/docMissionStepParser';
+import { parseDocReportFileToMissionStep } from './server/docReportMissionStepParser';
+import { parseExcelFileToMissionTables } from './server/excelMissionStepParser';
 import {
   listPersistedStepTablesFromServerSqlite,
   saveStepTablesToServerSqlite,
 } from './server/sqliteMissionStore';
 import type { ParsedBaseTable } from './src/data/missionStepsFormatData';
+import type { MissionStepDocumentData } from './src/types/missionStepDocument';
 
 interface ShareChangeLogEntry {
   id: string;
@@ -111,6 +114,7 @@ async function startServer() {
       conversationId?: string;
       messageId?: string;
       tables?: ParsedBaseTable[];
+      document?: MissionStepDocumentData | null;
       sourceFile?: string | null;
       parserEngine?: string | null;
       updatedBy?: string;
@@ -127,6 +131,8 @@ async function startServer() {
         conversationId: body.conversationId,
         messageId: body.messageId,
         tables: body.tables,
+        document: body.document,
+        preserveExistingDocument: body.document === undefined,
         sourceFile: body.sourceFile,
         parserEngine: body.parserEngine,
         updatedBy: body.updatedBy,
@@ -192,6 +198,127 @@ async function startServer() {
         err instanceof Error
           ? err.message
           : 'Impossible de lire les tables du fichier .doc.';
+      res.status(422).json({ error: msg });
+    }
+  });
+
+  app.post('/api/mission-steps/import-excel', async (req: Request, res: Response) => {
+    const body = req.body as {
+      fileName?: string;
+      fileBase64?: string;
+      nodeId?: string;
+      stepLabel?: string;
+      conversationId?: string;
+      messageId?: string;
+      updatedBy?: string;
+    };
+
+    if (!body?.fileName || !body?.fileBase64 || !body?.nodeId) {
+      res.status(400).json({
+        error: 'Fichier Excel (.xlsx/.xls), nom du fichier et identifiant étape requis.',
+      });
+      return;
+    }
+
+    try {
+      const cleanBase64 = body.fileBase64.includes(',')
+        ? body.fileBase64.split(',').pop() || ''
+        : body.fileBase64;
+      const buffer = Buffer.from(cleanBase64, 'base64');
+      if (buffer.length === 0) {
+        res.status(400).json({ error: 'Le fichier Excel importé est vide.' });
+        return;
+      }
+
+      const parsed = await parseExcelFileToMissionTables(buffer, body.fileName);
+      const record = saveStepTablesToServerSqlite({
+        nodeId: body.nodeId,
+        stepLabel: body.stepLabel || body.nodeId,
+        conversationId: body.conversationId,
+        messageId: body.messageId,
+        tables: parsed.tables,
+        sourceFile: body.fileName,
+        parserEngine: parsed.parserEngine,
+        updatedBy: body.updatedBy || 'user_admin_oha',
+        action: 'import_mission_step_excel',
+      });
+
+      res.json({
+        tables: parsed.tables,
+        parserEngine: parsed.parserEngine,
+        detectedFormat: parsed.detectedFormat,
+        warnings: parsed.warnings,
+        record,
+      });
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Impossible de lire les tables du fichier Excel.';
+      res.status(422).json({ error: msg });
+    }
+  });
+
+  app.post('/api/mission-steps/import-doc-report', async (req: Request, res: Response) => {
+    const body = req.body as {
+      fileName?: string;
+      fileBase64?: string;
+      nodeId?: string;
+      stepLabel?: string;
+      conversationId?: string;
+      messageId?: string;
+      updatedBy?: string;
+    };
+
+    if (!body?.fileName || !body?.fileBase64 || !body?.nodeId) {
+      res.status(400).json({
+        error: 'Fichier Word (.doc/.docx), nom du fichier et identifiant étape requis.',
+      });
+      return;
+    }
+
+    try {
+      const cleanBase64 = body.fileBase64.includes(',')
+        ? body.fileBase64.split(',').pop() || ''
+        : body.fileBase64;
+      const buffer = Buffer.from(cleanBase64, 'base64');
+      if (buffer.length === 0) {
+        res.status(400).json({ error: 'Le fichier Word importé est vide.' });
+        return;
+      }
+
+      const parsed = await parseDocReportFileToMissionStep(
+        buffer,
+        body.fileName,
+        body.stepLabel || body.nodeId
+      );
+      const record = saveStepTablesToServerSqlite({
+        nodeId: body.nodeId,
+        stepLabel: body.stepLabel || body.nodeId,
+        conversationId: body.conversationId,
+        messageId: body.messageId,
+        tables: parsed.tables,
+        document: parsed.document,
+        preserveExistingDocument: false,
+        sourceFile: body.fileName,
+        parserEngine: parsed.parserEngine,
+        updatedBy: body.updatedBy || 'user_admin_oha',
+        action: 'import_mission_step_doc_report',
+      });
+
+      res.json({
+        document: parsed.document,
+        tables: parsed.tables,
+        parserEngine: parsed.parserEngine,
+        detectedFormat: parsed.detectedFormat,
+        warnings: parsed.warnings,
+        record,
+      });
+    } catch (err) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : 'Impossible de lire le document rapport Word (.doc/.docx).';
       res.status(422).json({ error: msg });
     }
   });

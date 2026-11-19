@@ -109,7 +109,7 @@ export const AuditChatWorkspace: React.FC<AuditChatWorkspaceProps> = ({
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-left text-xs">
                       <thead>
-                        <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
+                        <tr className="wf-table-head-row divide-x text-[12px] font-semibold">
                           {msg.table.headers.map((header, i) => (
                             <th key={i} className="px-3.5 py-2.5 whitespace-nowrap">
                               {header}

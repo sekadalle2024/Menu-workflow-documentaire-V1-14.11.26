@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { ParsedBaseTable } from '../src/data/missionStepsFormatData';
+import type { MissionStepDocumentData } from '../src/types/missionStepDocument';
 
 export interface PersistedMissionStepRecord {
   nodeId: string;
@@ -8,6 +9,7 @@ export interface PersistedMissionStepRecord {
   conversationId: string;
   messageId: string;
   tables: ParsedBaseTable[];
+  document: MissionStepDocumentData | null;
   markdown: string;
   sourceFile: string | null;
   parserEngine: string | null;
@@ -34,6 +36,7 @@ function getDb(): DatabaseSync {
       conversation_id TEXT NOT NULL,
       message_id TEXT NOT NULL,
       tables_json TEXT NOT NULL,
+      document_json TEXT,
       markdown TEXT NOT NULL,
       source_file TEXT,
       parser_engine TEXT,
@@ -62,6 +65,13 @@ function getDb(): DatabaseSync {
       created_at INTEGER NOT NULL
     );
   `);
+
+  const columns = db
+    .prepare(`PRAGMA table_info(mission_step_tables)`)
+    .all() as Array<{ name: string }>;
+  if (!columns.some((col) => col.name === 'document_json')) {
+    db.exec(`ALTER TABLE mission_step_tables ADD COLUMN document_json TEXT;`);
+  }
 
   dbInstance = db;
   return db;
@@ -93,6 +103,8 @@ export function saveStepTablesToServerSqlite(input: {
   conversationId?: string;
   messageId?: string;
   tables: ParsedBaseTable[];
+  document?: MissionStepDocumentData | null;
+  preserveExistingDocument?: boolean;
   sourceFile?: string | null;
   parserEngine?: string | null;
   updatedBy?: string;
@@ -106,18 +118,23 @@ export function saveStepTablesToServerSqlite(input: {
   const updatedBy = input.updatedBy || 'user_admin_oha';
   const markdown = tablesToMarkdownServer(input.tables);
   const tablesJson = JSON.stringify(input.tables);
+  const docJson = input.document ? JSON.stringify(input.document) : null;
 
   const upsertStep = db.prepare(`
     INSERT INTO mission_step_tables (
       node_id, step_label, conversation_id, message_id,
-      tables_json, markdown, source_file, parser_engine,
+      tables_json, document_json, markdown, source_file, parser_engine,
       updated_at, updated_by
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(node_id) DO UPDATE SET
       step_label = excluded.step_label,
       conversation_id = excluded.conversation_id,
       message_id = excluded.message_id,
       tables_json = excluded.tables_json,
+      document_json = CASE
+        WHEN ? = 1 THEN COALESCE(excluded.document_json, mission_step_tables.document_json)
+        ELSE excluded.document_json
+      END,
       markdown = excluded.markdown,
       source_file = COALESCE(excluded.source_file, mission_step_tables.source_file),
       parser_engine = COALESCE(excluded.parser_engine, mission_step_tables.parser_engine),
@@ -131,11 +148,13 @@ export function saveStepTablesToServerSqlite(input: {
     convId,
     msgId,
     tablesJson,
+    docJson,
     markdown,
     input.sourceFile ?? null,
     input.parserEngine ?? null,
     now,
-    updatedBy
+    updatedBy,
+    input.preserveExistingDocument !== false ? 1 : 0
   );
 
   const messagePayload = JSON.stringify({
@@ -146,6 +165,7 @@ export function saveStepTablesToServerSqlite(input: {
       executionId: `exec_sqlite_${now}`,
       nodeId: input.nodeId,
       sourceFile: input.sourceFile ?? undefined,
+      documentData: input.document ?? undefined,
     },
   });
 
@@ -170,6 +190,7 @@ export function saveStepTablesToServerSqlite(input: {
     JSON.stringify({
       stepLabel: input.stepLabel,
       tablesCount: input.tables.length,
+      blocksCount: input.document?.blocks?.length ?? 0,
       sourceFile: input.sourceFile ?? null,
       parserEngine: input.parserEngine ?? null,
     }),
@@ -182,6 +203,7 @@ export function saveStepTablesToServerSqlite(input: {
     conversationId: convId,
     messageId: msgId,
     tables: input.tables,
+    document: input.document ?? null,
     markdown,
     sourceFile: input.sourceFile ?? null,
     parserEngine: input.parserEngine ?? null,
@@ -193,7 +215,7 @@ export function saveStepTablesToServerSqlite(input: {
 export function listPersistedStepTablesFromServerSqlite(): PersistedMissionStepRecord[] {
   const db = getDb();
   const stmt = db.prepare(`
-    SELECT node_id, step_label, conversation_id, message_id, tables_json,
+    SELECT node_id, step_label, conversation_id, message_id, tables_json, document_json,
            markdown, source_file, parser_engine, updated_at, updated_by
     FROM mission_step_tables
     ORDER BY updated_at DESC
@@ -204,6 +226,7 @@ export function listPersistedStepTablesFromServerSqlite(): PersistedMissionStepR
     conversation_id: string;
     message_id: string;
     tables_json: string;
+    document_json: string | null;
     markdown: string;
     source_file: string | null;
     parser_engine: string | null;
@@ -215,13 +238,22 @@ export function listPersistedStepTablesFromServerSqlite(): PersistedMissionStepR
   for (const r of rows) {
     try {
       const tables = JSON.parse(r.tables_json) as ParsedBaseTable[];
-      if (Array.isArray(tables) && tables.length > 0) {
+      let parsedDoc: MissionStepDocumentData | null = null;
+      if (r.document_json) {
+        try {
+          parsedDoc = JSON.parse(r.document_json) as MissionStepDocumentData;
+        } catch {
+          parsedDoc = null;
+        }
+      }
+      if ((Array.isArray(tables) && tables.length > 0) || parsedDoc) {
         out.push({
           nodeId: r.node_id,
           stepLabel: r.step_label,
           conversationId: r.conversation_id,
           messageId: r.message_id,
-          tables,
+          tables: Array.isArray(tables) ? tables : [],
+          document: parsedDoc,
           markdown: r.markdown,
           sourceFile: r.source_file,
           parserEngine: r.parser_engine,

@@ -924,7 +924,7 @@ export const RecoInfoManagerPanel: React.FC<RecoInfoManagerPanelProps> = ({
               <div className="overflow-hidden rounded-lg border border-slate-300/90 bg-white shadow-[0_6px_18px_-3px_rgba(15,23,42,0.22),0_3px_8px_-2px_rgba(15,23,42,0.14)]">
                 <table className="w-full border-collapse text-left text-xs">
                   <thead>
-                    <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
+                    <tr className="wf-table-head-row divide-x text-[12px] font-semibold">
                       <th className="w-12 px-3.5 py-2.5 font-mono">N°</th>
                       <th className="w-48 px-3.5 py-2.5">Rubrique</th>
                       <th className="px-3.5 py-2.5">Description</th>
@@ -988,7 +988,7 @@ export const RecoInfoManagerPanel: React.FC<RecoInfoManagerPanelProps> = ({
                 <div className="overflow-x-auto rounded-lg border border-slate-300/90 bg-white shadow-[0_6px_18px_-3px_rgba(15,23,42,0.22),0_3px_8px_-2px_rgba(15,23,42,0.14)]">
                   <table className="w-full border-collapse text-left text-xs">
                     <thead>
-                      <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
+                      <tr className="wf-table-head-row divide-x text-[12px] font-semibold">
                         {SOURCE_COLUMNS.map((col, idx) => (
                           <th
                             key={col.key}

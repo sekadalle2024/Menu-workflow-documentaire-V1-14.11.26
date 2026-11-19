@@ -237,7 +237,7 @@ export const IntegratedDataViewer: React.FC<IntegratedDataViewerProps> = ({
                       {renderAsRubriqueDesc ? (
                         <table className="w-full border-collapse text-left text-xs">
                           <thead>
-                            <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
+                            <tr className="wf-table-head-row divide-x text-[12px] font-semibold">
                               <th className="w-[28%] min-w-[140px] max-w-[230px] px-3.5 py-2.5 whitespace-nowrap">
                                 Rubrique
                               </th>
@@ -260,7 +260,7 @@ export const IntegratedDataViewer: React.FC<IntegratedDataViewerProps> = ({
                       ) : (
                         <table className="w-full border-collapse text-left text-xs">
                           <thead>
-                            <tr className="divide-x divide-red-950/45 bg-[#8B0000] text-[12px] font-semibold text-white">
+                            <tr className="wf-table-head-row divide-x text-[12px] font-semibold">
                               {columns.map((col) => (
                                 <th key={col} className="px-3.5 py-2.5 whitespace-nowrap">
                                   {col}

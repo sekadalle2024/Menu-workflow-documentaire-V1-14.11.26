@@ -40,3 +40,106 @@
   border-radius: 8px;
   animation: audit-highlight-pulse 1.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+.wf-table-head-row {
+  background-color: var(--wf-table-head-bg, #8B0000);
+  color: var(--wf-table-head-text, #FFFFFF);
+}
+
+.wf-table-head-row > th,
+.wf-table-head-row > td {
+  border-color: var(--wf-table-head-divider, #5C0A0A);
+}
+
+html[data-workflow-theme="blanc"] .wf-table-head-row {
+  border-bottom: 2px solid #cbd5e1;
+}
+
+.wf-table-head-btn {
+  background-color: var(--wf-table-head-btn-bg, rgba(255, 255, 255, 0.16));
+  color: var(--wf-table-head-btn-text, #FFFFFF);
+}
+
+.wf-table-head-btn:hover {
+  background-color: var(--wf-table-head-btn-hover, rgba(255, 255, 255, 0.26));
+}
+
+.wf-brand-btn {
+  background-color: var(--wf-primary, #8B0000);
+  color: var(--wf-primary-text, #FFFFFF);
+  border-color: var(--wf-primary-border, rgba(248, 113, 113, 0.4));
+}
+
+.wf-brand-btn:hover {
+  background-color: var(--wf-primary-hover, #a10d0d);
+}
+
+.wf-step-topbar {
+  background-color: var(--wf-step-bar-bg, #0F172A);
+  color: var(--wf-step-bar-text, #FFFFFF);
+  border-bottom: 1px solid var(--wf-step-bar-border, #334155);
+}
+
+.wf-step-topbar-sub {
+  color: var(--wf-step-bar-sub, rgba(255, 255, 255, 0.8));
+}
+
+.wf-step-topbar-btn {
+  background-color: var(--wf-step-bar-btn-bg, rgba(255, 255, 255, 0.15));
+  color: var(--wf-step-bar-btn-text, #FFFFFF);
+}
+
+.wf-step-topbar-btn:hover {
+  background-color: var(--wf-step-bar-btn-hover, rgba(255, 255, 255, 0.25));
+}
+
+.wf-sliding-aside {
+  background-color: var(--wf-panel-bg, #0F172A);
+  border-color: var(--wf-panel-border, #1E293B);
+  color: var(--wf-panel-text, #F1F5F9);
+}
+
+.wf-theme-chrome {
+  background-color: var(--wf-panel-bg, #0F172A);
+  border-color: var(--wf-panel-border, #1E293B);
+  color: var(--wf-panel-text, #F1F5F9);
+}
+
+.wf-theme-chrome-elevated {
+  background-color: var(--wf-panel-elevated, #020617);
+  border-color: var(--wf-panel-border, #1E293B);
+}
+
+html[data-workflow-theme="blanc"] .wf-theme-chrome .text-white,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .text-slate-100,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .text-slate-200 {
+  color: #0f172a;
+}
+
+html[data-workflow-theme="blanc"] .wf-theme-chrome .text-slate-300,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .text-slate-400,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .text-slate-500 {
+  color: #475569;
+}
+
+html[data-workflow-theme="blanc"] .wf-theme-chrome .bg-slate-800,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .bg-slate-800\/80,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .bg-slate-900,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .bg-slate-950,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .bg-slate-950\/60,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .bg-slate-950\/90 {
+  background-color: #f8fafc;
+}
+
+html[data-workflow-theme="blanc"] .wf-theme-chrome .hover\:bg-slate-800:hover,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .hover\:bg-slate-700:hover,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .hover\:bg-slate-800\/70:hover {
+  background-color: #e2e8f0;
+}
+
+html[data-workflow-theme="blanc"] .wf-theme-chrome .border-slate-700,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .border-slate-800,
+html[data-workflow-theme="blanc"] .wf-theme-chrome .border-slate-700\/70 {
+  border-color: #cbd5e1;
+}
+
